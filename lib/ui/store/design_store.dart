@@ -64,6 +64,8 @@ class FlvpDesignStore extends ChangeNotifier {
   DateTime clock = DateTime.now();
 
   List<NodeInfo> nodes = List.of(flvpInitialNodes);
+  List<PolicyGroupInfo> policyGroups = const [];
+  Future<void> selectGroupMember(String groupId, String memberId) async {}
   String selectedNodeId = 'hk-01';
   bool testing = false;
 
@@ -206,6 +208,30 @@ class FlvpDesignStore extends ChangeNotifier {
     notify('已导入「$name」');
   }
 
+  Future<bool> importRemoteConfiguration(String name, String url) async {
+    importSub(name, url);
+    return true;
+  }
+
+  Future<bool> importFileConfiguration(String name) async {
+    notify('设计预览不读取本地文件');
+    return false;
+  }
+
+  Future<bool> createManualConfiguration(
+    String name,
+    String protocol,
+    String server,
+    String port,
+  ) async {
+    notify('设计预览不保存配置');
+    return false;
+  }
+
+  Future<void> copySubscriptionUrl(String id) async {
+    notify('设计预览不复制订阅链接');
+  }
+
   void removeSub(String id) {
     final snapshot = List.of(subs);
     final target = subs.where((sub) => sub.id == id).firstOrNull;
@@ -223,7 +249,7 @@ class FlvpDesignStore extends ChangeNotifier {
     );
   }
 
-  void refreshSub(String id) {
+  Future<void> refreshSub(String id) async {
     subs = [
       for (final sub in subs) sub.id == id ? sub.copyWith(updated: '刚刚') : sub,
     ];

@@ -20,6 +20,7 @@ class HostTransportException implements Exception {
 class WindowsHostTransport implements HostTransport {
   WindowsHostTransport({
     String? executable,
+    this.supportDirectory,
     this.timeout = const Duration(seconds: 35),
   }) : executable =
            executable ??
@@ -30,15 +31,18 @@ class WindowsHostTransport implements HostTransport {
            );
 
   final String executable;
+  final String? supportDirectory;
   final Duration timeout;
   Process? _process;
   Future<void>? _starting;
+  Future<void>? _recovering;
   final Map<String, Completer<Map<String, dynamic>>> _pending = {};
   final List<String> _recentDiagnostics = [];
   bool _closed = false;
 
   Future<void> _ensureStarted() async {
     if (_closed) throw const HostTransportException('宿主连接已关闭');
+    await _recovering;
     if (_process != null) return;
     await (_starting ??= _start().whenComplete(() => _starting = null));
   }
@@ -54,6 +58,10 @@ class WindowsHostTransport implements HostTransport {
       [],
       runInShell: false,
       workingDirectory: File(executable).parent.path,
+      environment: {
+        ...Platform.environment,
+        'FLVP_APP_SUPPORT_DIR': ?supportDirectory,
+      },
     );
     _process = process;
     process.stdout
@@ -82,11 +90,49 @@ class WindowsHostTransport implements HostTransport {
           if (_recentDiagnostics.length > 100) _recentDiagnostics.removeAt(0);
         }, onError: (Object _) {});
     unawaited(
-      process.exitCode.then((_) {
+      process.exitCode.then((_) async {
         if (identical(_process, process)) _process = null;
-        _failPending(const HostTransportException('原生宿主已退出，代理已停止'));
+        // A fresh recovery-only process owns the same lock and journal. It
+        // covers host crashes/forced termination while the Flutter UI is alive.
+        final recovery = _recoverSystemProxy();
+        _recovering = recovery;
+        try {
+          await recovery;
+          _failPending(const HostTransportException('原生宿主已退出，代理已停止'));
+        } catch (_) {
+          _failPending(
+            const HostTransportException(
+              '原生宿主已退出；系统代理恢复失败或设置已被外部修改，请重新连接查看恢复状态',
+            ),
+          );
+        } finally {
+          if (identical(_recovering, recovery)) _recovering = null;
+        }
       }),
     );
+  }
+
+  Future<void> _recoverSystemProxy() async {
+    if (supportDirectory == null) return;
+    final process = await Process.start(
+      executable,
+      ['--recover-system-proxy'],
+      runInShell: false,
+      environment: {'FLVP_APP_SUPPORT_DIR': supportDirectory!},
+    );
+    final stdoutDrain = process.stdout.drain<void>();
+    final stderrDrain = process.stderr.drain<void>();
+    final exitCode = await process.exitCode.timeout(
+      const Duration(seconds: 10),
+      onTimeout: () {
+        process.kill();
+        throw const HostTransportException('系统代理恢复超时，日志已保留');
+      },
+    );
+    await Future.wait([stdoutDrain, stderrDrain]);
+    if (exitCode != 0) {
+      throw const HostTransportException('系统代理恢复失败，恢复日志已保留');
+    }
   }
 
   void _failPending(Object error) {
@@ -133,7 +179,10 @@ class WindowsHostTransport implements HostTransport {
   Future<void> close() async {
     _closed = true;
     final process = _process;
-    if (process == null) return;
+    if (process == null) {
+      await _recovering;
+      return;
+    }
     await process.stdin.close();
     try {
       await process.exitCode.timeout(const Duration(seconds: 4));
@@ -141,6 +190,7 @@ class WindowsHostTransport implements HostTransport {
       process.kill();
       await process.exitCode;
     }
+    await _recovering;
   }
 }
 

@@ -24,6 +24,8 @@ class CoreStatus {
     this.download = 0,
     this.connections = 0,
     this.selected,
+    this.systemProxy = false,
+    this.systemProxyRecoveryError,
   });
   final CoreState state;
   final int generation;
@@ -34,6 +36,8 @@ class CoreStatus {
   final int download;
   final int connections;
   final String? selected;
+  final bool systemProxy;
+  final String? systemProxyRecoveryError;
   bool get running => state == CoreState.running;
 
   factory CoreStatus.fromJson(Map<String, dynamic> json) => CoreStatus(
@@ -46,6 +50,8 @@ class CoreStatus {
     download: json['download'] as int,
     connections: json['connections'] as int,
     selected: json['selected'] as String?,
+    systemProxy: json['systemProxy'] as bool? ?? false,
+    systemProxyRecoveryError: json['systemProxyRecoveryError'] as String?,
   );
 }
 
@@ -112,5 +118,8 @@ class CoreBridge {
   Future<void> apply(RuntimeSnapshot snapshot) =>
       _request('apply', snapshot.arguments).then((_) {});
   Future<void> stop() => _request('stop').then((_) {});
+  Future<void> setSystemProxy(bool enabled) =>
+      _request(enabled ? 'enableSystemProxy' : 'disableSystemProxy')
+          .then((_) {});
   Future<void> close() => transport.close();
 }

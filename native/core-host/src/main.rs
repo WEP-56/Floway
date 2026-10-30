@@ -5,6 +5,15 @@ use flvp_host::{Host, MAX_REQUEST_BYTES, init_logging};
 fn main() -> io::Result<()> {
     init_logging();
     let mut host = Host::default();
+    if std::env::args().nth(1).as_deref() == Some("--recover-system-proxy") {
+        let response = host.request(r#"{"requestId":"recovery","operation":"capabilities"}"#);
+        if !response["result"]["systemProxyRecoveryError"].is_null() {
+            return Err(io::Error::other(
+                "System proxy recovery failed or settings changed externally",
+            ));
+        }
+        return Ok(());
+    }
     let stdin = io::stdin();
     let mut input = stdin.lock();
     let stdout = io::stdout();

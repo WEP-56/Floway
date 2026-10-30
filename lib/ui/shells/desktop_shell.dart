@@ -73,10 +73,8 @@ class _FlvpDesktopShellState extends State<FlvpDesktopShell> {
   void _openImport() {
     final host = _host.currentState!;
     host.show(
-      (context) => FlvpImportSubModal(
-        platform: FlvpPlatform.pc,
-        onClose: host.close,
-      ),
+      (context) =>
+          FlvpImportSubModal(platform: FlvpPlatform.pc, onClose: host.close),
     );
   }
 
@@ -253,26 +251,55 @@ class _FlvpDesktopShellState extends State<FlvpDesktopShell> {
     final store = FlvpStoreScope.of(context);
     final toast = store.toast;
     final Widget? actions = switch (_page) {
-      FlvpPageKey.dashboard => Container(
-        padding: const EdgeInsets.fromLTRB(16, 4, 4, 4),
-        decoration: BoxDecoration(
-          color: colors.surface,
-          borderRadius: BorderRadius.circular(999),
-          boxShadow: FlvpElevation.card,
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          spacing: 12,
-          children: [
-            FlvpIcon('Globe', size: 15, color: colors.ink3),
-            Text('系统代理', style: flvpText(13, color: colors.ink)),
-            FlvpSwitch(
-              value: store.settings.systemProxy,
-              label: '系统代理',
-              onChanged: (v) => store.setSettings((c) => c.copyWith(systemProxy: v)),
+      FlvpPageKey.dashboard => Row(
+        mainAxisSize: MainAxisSize.min,
+        spacing: 10,
+        children: [
+          Container(
+            padding: const EdgeInsets.fromLTRB(16, 4, 4, 4),
+            decoration: BoxDecoration(
+              color: colors.surface,
+              borderRadius: BorderRadius.circular(999),
+              boxShadow: FlvpElevation.card,
             ),
-          ],
-        ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              spacing: 12,
+              children: [
+                FlvpIcon('Globe', size: 15, color: colors.ink3),
+                Text('系统代理', style: flvpText(13, color: colors.ink)),
+                FlvpSwitch(
+                  value: store.settings.systemProxy,
+                  label: '系统代理',
+                  onChanged: (v) =>
+                      store.setSettings((c) => c.copyWith(systemProxy: v)),
+                ),
+              ],
+            ),
+          ),
+          Container(
+            padding: const EdgeInsets.fromLTRB(16, 4, 4, 4),
+            decoration: BoxDecoration(
+              color: colors.surface,
+              borderRadius: BorderRadius.circular(999),
+              boxShadow: FlvpElevation.card,
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              spacing: 12,
+              children: [
+                  FlvpIcon('Network', size: 15, color: colors.ink3),
+                Text('TUN', style: flvpText(13, color: colors.ink)),
+                FlvpSwitch(
+                  value: store.settings.tunMode,
+                  label: 'TUN 模式',
+                  onChanged: (v) =>
+                      store.setSettings((c) => c.copyWith(tunMode: v)),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
       FlvpPageKey.nodes => FlvpButton(
         variant: FlvpButtonVariant.tonal,
@@ -311,7 +338,11 @@ class _FlvpDesktopShellState extends State<FlvpDesktopShell> {
                       children: [
                         Text(
                           flvpPageTitles[_page]!,
-                          style: flvpText(24, letterSpacing: -0.6, color: colors.ink),
+                          style: flvpText(
+                            24,
+                            letterSpacing: -0.6,
+                            color: colors.ink,
+                          ),
                         ),
                         const Spacer(),
                         ?actions,
@@ -337,11 +368,18 @@ class _FlvpDesktopShellState extends State<FlvpDesktopShell> {
                           child: switch (_page) {
                             FlvpPageKey.dashboard => FlvpDashboardPage(
                               platform: FlvpPlatform.pc,
-                              onNavigate: (page) => setState(() => _page = page),
+                              onNavigate: (page) =>
+                                  setState(() => _page = page),
                             ),
-                            FlvpPageKey.nodes => const FlvpNodesPage(platform: FlvpPlatform.pc),
-                            FlvpPageKey.subs => const FlvpSubscriptionsPage(platform: FlvpPlatform.pc),
-                            FlvpPageKey.settings => const FlvpSettingsPage(platform: FlvpPlatform.pc),
+                            FlvpPageKey.nodes => const FlvpNodesPage(
+                              platform: FlvpPlatform.pc,
+                            ),
+                            FlvpPageKey.subs => const FlvpSubscriptionsPage(
+                              platform: FlvpPlatform.pc,
+                            ),
+                            FlvpPageKey.settings => const FlvpSettingsPage(
+                              platform: FlvpPlatform.pc,
+                            ),
                           },
                         ),
                       ),
@@ -483,7 +521,9 @@ class _RailItem extends StatelessWidget {
                       decoration: BoxDecoration(
                         color: active
                             ? colors.scontainer
-                            : (hovered ? colors.ink.withValues(alpha: 0.06) : const Color(0x00000000)),
+                            : (hovered
+                                  ? colors.ink.withValues(alpha: 0.06)
+                                  : const Color(0x00000000)),
                         borderRadius: BorderRadius.circular(999),
                       ),
                     ),
@@ -509,7 +549,9 @@ class _RailItem extends StatelessWidget {
                     right: 0,
                     top: 42,
                     child: AnimatedOpacity(
-                      duration: expanded ? const Duration(milliseconds: 100) : FlvpMotion.rail,
+                      duration: expanded
+                          ? const Duration(milliseconds: 100)
+                          : FlvpMotion.rail,
                       curve: expanded ? Curves.linear : const Interval(0.4, 1),
                       opacity: expanded ? 0 : 1,
                       child: Text(
@@ -529,8 +571,12 @@ class _RailItem extends StatelessWidget {
                     bottom: 0,
                     child: Center(
                       child: AnimatedOpacity(
-                        duration: expanded ? FlvpMotion.rail : const Duration(milliseconds: 100),
-                        curve: expanded ? const Interval(0.4, 1) : Curves.linear,
+                        duration: expanded
+                            ? FlvpMotion.rail
+                            : const Duration(milliseconds: 100),
+                        curve: expanded
+                            ? const Interval(0.4, 1)
+                            : Curves.linear,
                         opacity: expanded ? 1 : 0,
                         child: Text(
                           label,

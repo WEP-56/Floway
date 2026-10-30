@@ -2,6 +2,8 @@
 //! No upstream CLI, route cleaner, external controller, TUN or provider downloader.
 
 mod config;
+mod node_options;
+mod system_proxy;
 
 use std::ffi::{CStr, CString, c_char};
 use std::io::{Read, Write};
@@ -107,6 +109,9 @@ pub struct Host {
     running: Option<Running>,
     generation: u64,
     failed: bool,
+    network_recovered: bool,
+    network_recovery_error: Option<String>,
+    network_lock: Option<std::fs::File>,
 }
 
 impl Host {
@@ -141,9 +146,26 @@ impl Host {
         &mut self,
         req: &Request,
     ) -> Result<Value, (&'static str, String, Option<&'static str>)> {
+        self.recover_network_state();
+        if app_support_root().is_some()
+            && self.network_lock.is_none()
+            && !matches!(req.operation.as_str(), "capabilities" | "status")
+        {
+            return Err((
+                "NETWORK_OWNER_BUSY",
+                "另一个实例正在管理系统代理，或数据目录无法加锁".into(),
+                None,
+            ));
+        }
         if matches!(
             req.operation.as_str(),
-            "start" | "apply" | "stop" | "quit" | "select"
+            "start"
+                | "apply"
+                | "stop"
+                | "quit"
+                | "select"
+                | "enableSystemProxy"
+                | "disableSystemProxy"
         ) {
             let revision = self
                 .running
@@ -161,20 +183,73 @@ impl Host {
             }
         }
         match req.operation.as_str() {
-            "capabilities" => Ok(json!({
-                "protocolVersion": PROTOCOL_VERSION,
-                "coreCommit": CORE_COMMIT,
-                "coreVersion": "1.1.0",
-                "hostVersion": env!("CARGO_PKG_VERSION"),
-                "coreBuildId": format!("{CORE_COMMIT}/flvp-host-{}+P001", env!("CARGO_PKG_VERSION")),
-                "patches": ["P001-http-authority"],
-                "ordinaryProxy": true, "vpn": false, "tun": false,
-                "systemProxy": false, "subscriptionImport": false,
-                "hotReload": false, "applyStrategy": "restart-with-rollback",
-                "protocols": ["socks5", "http"],
-                "ruleTypes": ["DOMAIN", "DOMAIN-SUFFIX", "DOMAIN-KEYWORD", "IP-CIDR", "NETWORK", "DST-PORT", "MATCH"]
-            })),
-            "status" => Ok(self.status()),
+            "capabilities" => {
+                self.recover_network_state();
+                Ok(json!({
+                    "protocolVersion": PROTOCOL_VERSION,
+                    "coreCommit": CORE_COMMIT,
+                    "coreVersion": "1.1.0",
+                    "hostVersion": env!("CARGO_PKG_VERSION"),
+                    "coreBuildId": format!("{CORE_COMMIT}/flvp-host-{}+P001", env!("CARGO_PKG_VERSION")),
+                    "patches": ["P001-http-authority"],
+                    "ordinaryProxy": true, "vpn": false, "tun": false,
+                    "systemProxy": cfg!(target_os = "windows") && self.network_lock.is_some(), "subscriptionImport": false,
+                    "systemProxyRecoveryError": self.network_recovery_error,
+                    "hotReload": false, "applyStrategy": "restart-with-rollback",
+                    "protocols": ["socks5", "http", "ss", "vmess", "vless", "trojan", "anytls", "hysteria", "hysteria2"],
+                    "groupTypes": ["select", "url-test", "fallback"],
+                    "lazyHealthChecks": false,
+                    "ruleTypes": ["DOMAIN", "DOMAIN-SUFFIX", "DOMAIN-KEYWORD", "IP-CIDR", "NETWORK", "DST-PORT", "MATCH"]
+                }))
+            }
+            "status" => {
+                if self.network_lock.is_some()
+                    && let Some(root) = app_support_root()
+                    && root.join("state/system-proxy.json").exists()
+                    && !system_proxy::is_active(&root)
+                {
+                    self.network_recovery_error =
+                        Some("系统代理事务待恢复或已被外部修改；未覆盖新设置".into());
+                }
+                Ok(self.status())
+            }
+            "enableSystemProxy" => {
+                let Some(running) = self.running.as_ref() else {
+                    return Err((
+                        "NOT_RUNNING",
+                        "请先启动本地代理，再启用系统代理".into(),
+                        None,
+                    ));
+                };
+                let port = running.config.port;
+                if !socks_ready(port) {
+                    return Err((
+                        "LISTENER_NOT_READY",
+                        "本实例代理监听已失效，未开启系统代理".into(),
+                        None,
+                    ));
+                }
+                let root = app_support_root().ok_or((
+                    "STORAGE_UNAVAILABLE",
+                    "无法确定应用数据目录".into(),
+                    None,
+                ))?;
+                system_proxy::enable(&root, port).map_err(|e| ("SYSTEM_PROXY_FAILED", e, None))?;
+                self.network_recovery_error = None;
+                self.generation += 1;
+                Ok(self.status())
+            }
+            "disableSystemProxy" => {
+                let root = app_support_root().ok_or((
+                    "STORAGE_UNAVAILABLE",
+                    "无法确定应用数据目录".into(),
+                    None,
+                ))?;
+                system_proxy::restore(&root).map_err(|e| ("SYSTEM_PROXY_CONFLICT", e, None))?;
+                self.network_recovery_error = None;
+                self.generation += 1;
+                Ok(self.status())
+            }
             "start" | "apply" => {
                 let config = PreparedConfig::from_arguments(&req.arguments)
                     .map_err(|e| ("CONFIG_REJECTED", e, None))?;
@@ -189,13 +264,32 @@ impl Host {
                         return Err(("REVISION_CONFLICT", "Revision must increase".into(), None));
                     }
                 }
+                let root = app_support_root();
+                let reenable = self.network_lock.is_some()
+                    && root.as_deref().is_some_and(system_proxy::is_active);
+                if self.network_lock.is_some()
+                    && let Some(root) = &root
+                {
+                    system_proxy::restore(root).map_err(|e| ("SYSTEM_PROXY_CONFLICT", e, None))?;
+                }
+                let start = |config| -> Result<Running, String> {
+                    let running = Running::start(config)?;
+                    if reenable
+                        && let Some(root) = &root
+                        && let Err(error) = system_proxy::enable(root, running.config.port)
+                    {
+                        running.stop();
+                        return Err(error);
+                    }
+                    Ok(running)
+                };
                 let previous = self.running.take().map(|running| {
                     let config = running.config.clone();
                     running.stop();
                     config
                 });
                 self.generation += 1;
-                match Running::start(config) {
+                match start(config) {
                     Ok(running) => {
                         self.running = Some(running);
                         self.failed = false;
@@ -204,7 +298,7 @@ impl Host {
                     Err(error) => {
                         if let Some(previous) = previous {
                             self.generation += 1;
-                            match Running::start(previous) {
+                            match start(previous) {
                                 Ok(restored) => {
                                     self.running = Some(restored);
                                     self.failed = false;
@@ -223,7 +317,15 @@ impl Host {
                 }
             }
             "stop" | "quit" => {
+                let restore = app_support_root()
+                    .map(|root| system_proxy::restore(&root))
+                    .unwrap_or(Ok(false));
                 self.stop();
+                if let Err(error) = restore {
+                    self.network_recovery_error = Some(error.clone());
+                    return Err(("SYSTEM_PROXY_CONFLICT", error, None));
+                }
+                self.network_recovery_error = None;
                 Ok(self.status())
             }
             _ => Err((
@@ -235,6 +337,10 @@ impl Host {
     }
 
     pub fn status(&self) -> Value {
+        let system_proxy = self.network_lock.is_some()
+            && app_support_root()
+                .as_deref()
+                .is_some_and(system_proxy::is_active);
         if let Some(running) = &self.running {
             let stats = running.app.stats.snapshot();
             let router = running.app.router.current();
@@ -245,21 +351,66 @@ impl Host {
                 "appliedRevision": running.config.revision, "configHash": running.config.hash,
                 "mixedPort": running.config.port, "upload": stats.upload,
                 "download": stats.download, "connections": running.app.conns.list().len(),
-                "selected": selected})
+                "selected": selected, "systemProxy": system_proxy,
+                "systemProxyRecoveryError": self.network_recovery_error})
         } else {
             json!({"state": if self.failed {"failed"} else {"stopped"},
                 "generation": self.generation, "appliedRevision": 0,
                 "configHash": null, "mixedPort": null,
-                "upload": 0, "download": 0, "connections": 0, "selected": null})
+                "upload": 0, "download": 0, "connections": 0, "selected": null,
+                "systemProxy": system_proxy,
+                "systemProxyRecoveryError": self.network_recovery_error})
         }
     }
 
     pub fn stop(&mut self) {
+        if self.network_lock.is_some()
+            && let Some(root) = app_support_root()
+            && let Err(error) = system_proxy::restore(&root)
+        {
+            self.network_recovery_error = Some(error);
+        }
         if let Some(running) = self.running.take() {
             running.stop();
         }
         self.failed = false;
     }
+
+    fn recover_network_state(&mut self) {
+        if self.network_recovered {
+            return;
+        }
+        self.network_recovered = true;
+        if let Some(root) = app_support_root() {
+            let lock = (|| -> std::io::Result<std::fs::File> {
+                std::fs::create_dir_all(root.join("state"))?;
+                let file = std::fs::OpenOptions::new()
+                    .create(true)
+                    .truncate(false)
+                    .read(true)
+                    .write(true)
+                    .open(root.join("state/network.lock"))?;
+                file.try_lock().map_err(std::io::Error::other)?;
+                Ok(file)
+            })();
+            match lock {
+                Ok(file) => {
+                    self.network_lock = Some(file);
+                    if let Err(error) = system_proxy::restore(&root) {
+                        self.network_recovery_error = Some(error);
+                    }
+                }
+                Err(_) => {
+                    self.network_recovery_error =
+                        Some("系统代理管理锁不可用，请关闭其他 FLVPcore 实例后重试".into())
+                }
+            }
+        }
+    }
+}
+
+fn app_support_root() -> Option<std::path::PathBuf> {
+    std::env::var_os("FLVP_APP_SUPPORT_DIR").map(std::path::PathBuf::from)
 }
 
 impl Drop for Host {

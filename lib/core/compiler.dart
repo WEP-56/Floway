@@ -36,7 +36,7 @@ class CompiledConfig {
 
 class ConfigCompiler {
   const ConfigCompiler();
-  static const version = 'm0.1';
+  static const version = 'windows-policy.1';
 
   CompiledConfig compile(
     Profile profile, {
@@ -58,7 +58,9 @@ class ConfigCompiler {
       directTarget => 'DIRECT',
       rejectTarget => 'REJECT',
       proxyTarget => 'PROXY',
-      _ => profile.nodes.firstWhere((n) => n.id == id).coreName,
+      _ =>
+        profile.nodes.where((n) => n.id == id).firstOrNull?.coreName ??
+            profile.groups.firstWhere((g) => g.id == id).coreName,
     };
     final members = [...profile.nodes.map((n) => n.coreName), 'DIRECT'];
     if (selectedNodeId != null) {
@@ -96,10 +98,30 @@ class ConfigCompiler {
             'type': node.protocol.name,
             'server': node.server,
             'port': node.port,
+            ...node.options.toJson(),
           },
       ],
       'proxy-groups': [
         {'name': 'PROXY', 'type': 'select', 'proxies': members},
+        for (final group
+            in profile.mode == RoutingMode.rule
+                ? profile.groups
+                : <PolicyGroup>[])
+          {
+            'name': group.coreName,
+            'type': group.coreType,
+            'proxies': [
+              if (group.selectedId != null) target(group.selectedId!),
+              for (final member in group.members)
+                if (member != group.selectedId) target(member),
+            ],
+            if (group.kind != GroupKind.select) ...{
+              'url': group.url,
+              'interval': group.interval,
+              'lazy': false,
+              if (group.kind == GroupKind.urlTest) 'tolerance': group.tolerance,
+            },
+          },
       ],
       'rules': rules,
     });

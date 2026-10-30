@@ -30,11 +30,14 @@ void main() {
       store: SnapshotStore(root),
       bridge: CoreBridge(
         Platform.isWindows
-            ? WindowsHostTransport()
+            ? WindowsHostTransport(supportDirectory: root.path)
             : const AndroidHostTransport(),
       ),
     );
     var store = FlvpClientStore(c);
+    addTearDown(() async {
+      if (Platform.isWindows) await c.bridge.close();
+    });
     await store.initializeClient();
     await c.save(c.profile, port: port);
     expect(c.error, isNull);
@@ -43,6 +46,13 @@ void main() {
     await tester.pump(const Duration(milliseconds: 600));
     expect(c.error, isNull);
     expect(store.running, isTrue);
+    const verifySystemProxy = bool.fromEnvironment('VERIFY_SYSTEM_PROXY');
+    if (Platform.isWindows && verifySystemProxy) {
+      store.setSettings((s) => s.copyWith(systemProxy: true));
+      await store.flushSettings();
+      expect(c.error, isNull);
+      expect(store.settings.systemProxy, isTrue);
+    }
     expect(find.text('已连接'), findsOneWidget);
     final origin = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
     origin.listen((request) {
@@ -70,6 +80,9 @@ void main() {
     expect(c.error, contains('已恢复上一配置'));
     expect(c.status.mixedPort, port);
     expect(store.settings.mixedPort, '$port');
+    if (Platform.isWindows && verifySystemProxy) {
+      expect(c.status.systemProxy, isTrue);
+    }
     await occupied.close();
     await c.save(c.profile);
     if (Platform.isAndroid) {
@@ -93,6 +106,7 @@ void main() {
     expect(store.settings.mode, FlvpProxyMode.global);
     await store.toggleRunning();
     expect(store.running, isFalse);
+    expect(store.settings.systemProxy, isFalse);
     await tester.pumpWidget(const SizedBox());
     await store.toggleRunning();
     expect(store.running, isTrue);

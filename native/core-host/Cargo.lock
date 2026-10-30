@@ -624,7 +624,10 @@ dependencies = [
  "tracing-subscriber",
  "vp-app",
  "vp-config",
+ "vp-dns",
+ "vp-protocol",
  "vp-rule",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]

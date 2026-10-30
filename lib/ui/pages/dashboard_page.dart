@@ -51,7 +51,10 @@ class _Meta extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
-        Text(label, style: flvpText(12, weight: FontWeight.w400, color: colors.ink3)),
+        Text(
+          label,
+          style: flvpText(12, weight: FontWeight.w400, color: colors.ink3),
+        ),
         const SizedBox(height: 4),
         Text(
           value,
@@ -135,7 +138,11 @@ class _SpeedCard extends StatelessWidget {
               const SizedBox(width: 6),
               Text(
                 speed.unit,
-                style: flvpText(12, weight: FontWeight.w400, color: colors.ink3),
+                style: flvpText(
+                  12,
+                  weight: FontWeight.w400,
+                  color: colors.ink3,
+                ),
               ),
             ],
           ),
@@ -173,6 +180,31 @@ class _QuotaCard extends StatelessWidget {
     final colors = FlvpThemeScope.colorsOf(context);
     final sub = FlvpStoreScope.of(context).activeSub;
     final ratio = sub.total > 0 ? sub.used / sub.total : 0.0;
+    if (!sub.hasQuota) {
+      return FlvpCard(
+        onTap: onTap,
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          spacing: 14,
+          children: [
+            Text('订阅流量', style: flvpText(13, color: colors.ink2)),
+            Text('—', style: flvpText(32, color: colors.ink)),
+            Text(
+              sub.remote ? '未提供流量信息' : '本地配置 · 无订阅额度',
+              style: flvpText(12, color: colors.ink3),
+            ),
+            Text(
+              sub.name,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: flvpText(12, color: colors.ink2),
+            ),
+          ],
+        ),
+      );
+    }
     final left = (sub.total - sub.used).clamp(0.0, double.infinity);
     return FlvpCard(
       padding: const EdgeInsets.all(20),
@@ -190,12 +222,21 @@ class _QuotaCard extends StatelessWidget {
             children: [
               Text(
                 sub.used.toStringAsFixed(1),
-                style: flvpText(30, height: 1, color: colors.ink, tabular: true),
+                style: flvpText(
+                  30,
+                  height: 1,
+                  color: colors.ink,
+                  tabular: true,
+                ),
               ),
               const SizedBox(width: 6),
               Text(
                 '/ ${_trim(sub.total)} GB',
-                style: flvpText(12, weight: FontWeight.w400, color: colors.ink3),
+                style: flvpText(
+                  12,
+                  weight: FontWeight.w400,
+                  color: colors.ink3,
+                ),
               ),
             ],
           ),
@@ -204,7 +245,9 @@ class _QuotaCard extends StatelessWidget {
             padding: const EdgeInsets.only(top: 24),
             child: FlvpProgressBar(
               value: ratio,
-              tone: ratio > 0.75 ? FlvpProgressTone.warn : FlvpProgressTone.primary,
+              tone: ratio > 0.75
+                  ? FlvpProgressTone.warn
+                  : FlvpProgressTone.primary,
             ),
           ),
           const SizedBox(height: 12),
@@ -230,8 +273,9 @@ class _QuotaCard extends StatelessWidget {
 }
 
 /// `{activeSub.total}` renders 200, not 200.0.
-String _trim(double value) =>
-    value == value.roundToDouble() ? value.toInt().toString() : value.toString();
+String _trim(double value) => value == value.roundToDouble()
+    ? value.toInt().toString()
+    : value.toString();
 
 class _DesktopDashboard extends StatelessWidget {
   const _DesktopDashboard({required this.onNavigate});
@@ -242,7 +286,9 @@ class _DesktopDashboard extends StatelessWidget {
   Widget build(BuildContext context) {
     final store = FlvpStoreScope.of(context);
     final colors = FlvpThemeScope.colorsOf(context);
-    final scope = store.settings.statsScope == FlvpStatsScope.total ? '累计' : '本次';
+    final scope = store.settings.statsScope == FlvpStatsScope.total
+        ? '累计'
+        : '本次';
     final node = store.currentNode;
     final running = store.running;
     return Column(
@@ -276,7 +322,11 @@ class _DesktopDashboard extends StatelessWidget {
                         FlvpIcon('Globe2', size: 15, color: colors.ink3),
                         Text(
                           '${node.name} · ${node.proto}',
-                          style: flvpText(14, weight: FontWeight.w400, color: colors.ink2),
+                          style: flvpText(
+                            14,
+                            weight: FontWeight.w400,
+                            color: colors.ink2,
+                          ),
                         ),
                       ],
                     ),
@@ -289,7 +339,9 @@ class _DesktopDashboard extends StatelessWidget {
                           Expanded(
                             child: _Meta(
                               label: '运行时长',
-                              value: running ? fmtUptime(store.uptime) : '--:--:--',
+                              value: running
+                                  ? fmtUptime(store.uptime)
+                                  : '--:--:--',
                             ),
                           ),
                           Expanded(
@@ -301,7 +353,10 @@ class _DesktopDashboard extends StatelessWidget {
                             ),
                           ),
                           Expanded(
-                            child: _Meta(label: '订阅', value: store.activeSub.name),
+                            child: _Meta(
+                              label: '订阅',
+                              value: store.activeSub.name,
+                            ),
                           ),
                         ],
                       ),
@@ -365,7 +420,10 @@ class _DesktopDashboard extends StatelessWidget {
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     spacing: 16,
-                    children: [Expanded(child: download), Expanded(child: upload)],
+                    children: [
+                      Expanded(child: download),
+                      Expanded(child: upload),
+                    ],
                   ),
                 ),
                 _QuotaCard(
@@ -385,7 +443,8 @@ class _DesktopDashboard extends StatelessWidget {
               FlvpSegmented<FlvpProxyMode>(
                 size: FlvpControlSize.sm,
                 value: store.settings.mode,
-                onChanged: (mode) => store.setSettings((s) => s.copyWith(mode: mode)),
+                onChanged: (mode) =>
+                    store.setSettings((s) => s.copyWith(mode: mode)),
                 options: _modeOptions,
               ),
               const Spacer(),
@@ -408,8 +467,15 @@ class _DesktopDashboard extends StatelessWidget {
                         children: [
                           FlvpIcon('Route', size: 15, color: colors.ink3),
                           Text('节点', style: flvpText(13, color: colors.ink2)),
-                          Text(node.name, style: flvpText(13, color: colors.ink)),
-                          FlvpIcon('ChevronRight', size: 16, color: colors.ink3),
+                          Text(
+                            node.name,
+                            style: flvpText(13, color: colors.ink),
+                          ),
+                          FlvpIcon(
+                            'ChevronRight',
+                            size: 16,
+                            color: colors.ink3,
+                          ),
                         ],
                       ),
                     ),
@@ -449,7 +515,9 @@ class _MobileDashboard extends StatelessWidget {
   Widget build(BuildContext context) {
     final store = FlvpStoreScope.of(context);
     final colors = FlvpThemeScope.colorsOf(context);
-    final scope = store.settings.statsScope == FlvpStatsScope.total ? '累计' : '本次';
+    final scope = store.settings.statsScope == FlvpStatsScope.total
+        ? '累计'
+        : '本次';
     final node = store.currentNode;
     final running = store.running;
     return Column(
@@ -467,22 +535,35 @@ class _MobileDashboard extends StatelessWidget {
                 size: 150,
               ),
               const SizedBox(height: 20),
-              Text(running ? '已连接' : '未连接', style: flvpText(24, color: colors.ink)),
+              Text(
+                running ? '已连接' : '未连接',
+                style: flvpText(24, color: colors.ink),
+              ),
               const SizedBox(height: 4),
               Text(
                 '${node.name} · ${node.proto}',
-                style: flvpText(13.5, weight: FontWeight.w400, color: colors.ink2),
+                style: flvpText(
+                  13.5,
+                  weight: FontWeight.w400,
+                  color: colors.ink2,
+                ),
               ),
               const SizedBox(height: 16),
               Row(
                 mainAxisSize: MainAxisSize.min,
                 spacing: 8,
                 children: [
-                  _stat(colors, 'Timer', running ? fmtUptime(store.uptime) : '--:--:--'),
+                  _stat(
+                    colors,
+                    'Timer',
+                    running ? fmtUptime(store.uptime) : '--:--:--',
+                  ),
                   _stat(
                     colors,
                     'Activity',
-                    running && node.latency != null ? '${node.latency} ms' : '—',
+                    running && node.latency != null
+                        ? '${node.latency} ms'
+                        : '—',
                   ),
                 ],
               ),
@@ -534,7 +615,8 @@ class _MobileDashboard extends StatelessWidget {
               FlvpSegmented<FlvpProxyMode>(
                 full: true,
                 value: store.settings.mode,
-                onChanged: (mode) => store.setSettings((s) => s.copyWith(mode: mode)),
+                onChanged: (mode) =>
+                    store.setSettings((s) => s.copyWith(mode: mode)),
                 options: _modeOptions,
               ),
             ],
@@ -567,7 +649,11 @@ class _MobileDashboard extends StatelessWidget {
                       '${node.name} · ${node.sub}',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: flvpText(12.5, weight: FontWeight.w400, color: colors.ink2),
+                      style: flvpText(
+                        12.5,
+                        weight: FontWeight.w400,
+                        color: colors.ink2,
+                      ),
                     ),
                   ],
                 ),

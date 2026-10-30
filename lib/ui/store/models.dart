@@ -39,6 +39,19 @@ class NodeInfo {
   );
 }
 
+class PolicyGroupInfo {
+  const PolicyGroupInfo({
+    required this.id,
+    required this.name,
+    required this.type,
+    required this.members,
+    required this.selectedId,
+  });
+  final String id, name, type;
+  final Map<String, String> members;
+  final String? selectedId;
+}
+
 class SubInfo {
   const SubInfo({
     required this.id,
@@ -49,6 +62,8 @@ class SubInfo {
     required this.expire,
     required this.updated,
     required this.active,
+    this.remote = true,
+    this.hasQuota = true,
   });
 
   final String id;
@@ -59,18 +74,26 @@ class SubInfo {
   final String expire;
   final String updated;
   final bool active;
+  final bool remote;
+  final bool hasQuota;
 
-  SubInfo copyWith({double? used, double? total, String? updated, bool? active}) =>
-      SubInfo(
-        id: id,
-        name: name,
-        url: url,
-        used: used ?? this.used,
-        total: total ?? this.total,
-        expire: expire,
-        updated: updated ?? this.updated,
-        active: active ?? this.active,
-      );
+  SubInfo copyWith({
+    double? used,
+    double? total,
+    String? updated,
+    bool? active,
+  }) => SubInfo(
+    id: id,
+    name: name,
+    url: url,
+    used: used ?? this.used,
+    total: total ?? this.total,
+    expire: expire,
+    updated: updated ?? this.updated,
+    active: active ?? this.active,
+    remote: remote,
+    hasQuota: hasQuota,
+  );
 }
 
 class AppSettings {
@@ -164,15 +187,78 @@ const flvpCoreVersion = 'vp_core 1.1.0 + P001';
 const flvpBuildDate = '2026-10-30';
 
 const List<NodeInfo> flvpInitialNodes = [
-  NodeInfo(id: 'auto', name: '自动选择', sub: '策略组', proto: '延迟最低优先', region: '', latency: 42),
-  NodeInfo(id: 'hk-01', name: '香港 01', sub: 'FLVP 高级订阅', proto: 'Hysteria2', region: 'HK', latency: 42),
-  NodeInfo(id: 'hk-02', name: '香港 02', sub: 'FLVP 高级订阅', proto: 'Hysteria2', region: 'HK', latency: 58),
-  NodeInfo(id: 'jp-01', name: '东京 01', sub: 'FLVP 高级订阅', proto: 'VLESS', region: 'JP', latency: 86),
-  NodeInfo(id: 'tw-01', name: '台北 01', sub: 'FLVP 高级订阅', proto: 'Shadowsocks', region: 'TW', latency: 97),
-  NodeInfo(id: 'sg-01', name: '新加坡 01', sub: 'FLVP 高级订阅', proto: 'Trojan', region: 'SG', latency: 121),
-  NodeInfo(id: 'us-01', name: '洛杉矶 01', sub: 'FLVP 高级订阅', proto: 'VLESS', region: 'US', latency: 168),
-  NodeInfo(id: 'home', name: '家庭网关', sub: '自建节点', proto: 'VMess', region: '', latency: 8),
-  NodeInfo(id: 'office', name: '办公室', sub: '自建节点', proto: 'VMess', region: '', latency: 24),
+  NodeInfo(
+    id: 'auto',
+    name: '自动选择',
+    sub: '策略组',
+    proto: '延迟最低优先',
+    region: '',
+    latency: 42,
+  ),
+  NodeInfo(
+    id: 'hk-01',
+    name: '香港 01',
+    sub: 'FLVP 高级订阅',
+    proto: 'Hysteria2',
+    region: 'HK',
+    latency: 42,
+  ),
+  NodeInfo(
+    id: 'hk-02',
+    name: '香港 02',
+    sub: 'FLVP 高级订阅',
+    proto: 'Hysteria2',
+    region: 'HK',
+    latency: 58,
+  ),
+  NodeInfo(
+    id: 'jp-01',
+    name: '东京 01',
+    sub: 'FLVP 高级订阅',
+    proto: 'VLESS',
+    region: 'JP',
+    latency: 86,
+  ),
+  NodeInfo(
+    id: 'tw-01',
+    name: '台北 01',
+    sub: 'FLVP 高级订阅',
+    proto: 'Shadowsocks',
+    region: 'TW',
+    latency: 97,
+  ),
+  NodeInfo(
+    id: 'sg-01',
+    name: '新加坡 01',
+    sub: 'FLVP 高级订阅',
+    proto: 'Trojan',
+    region: 'SG',
+    latency: 121,
+  ),
+  NodeInfo(
+    id: 'us-01',
+    name: '洛杉矶 01',
+    sub: 'FLVP 高级订阅',
+    proto: 'VLESS',
+    region: 'US',
+    latency: 168,
+  ),
+  NodeInfo(
+    id: 'home',
+    name: '家庭网关',
+    sub: '自建节点',
+    proto: 'VMess',
+    region: '',
+    latency: 8,
+  ),
+  NodeInfo(
+    id: 'office',
+    name: '办公室',
+    sub: '自建节点',
+    proto: 'VMess',
+    region: '',
+    latency: 24,
+  ),
 ];
 
 const List<SubInfo> flvpInitialSubs = [
@@ -218,6 +304,8 @@ const flvpEmptySub = SubInfo(
   expire: '—',
   updated: '—',
   active: true,
+  hasQuota: false,
+  remote: false,
 );
 
 class FlvpShortcut {

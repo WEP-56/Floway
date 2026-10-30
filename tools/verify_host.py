@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import base64
 import hashlib
 import http.server
 import json
@@ -60,8 +61,19 @@ class Upstream(socketserver.BaseRequestHandler):
         client.settimeout(5)
         if self.server.kind == "socks5":
             version, count = exact(client, 2)
-            assert version == 5 and 0 in exact(client, count)
-            client.sendall(b"\x05\x00")
+            methods = exact(client, count)
+            assert version == 5
+            if self.server.auth:
+                assert 2 in methods
+                client.sendall(b"\x05\x02")
+                assert exact(client, 1) == b"\x01"
+                username = exact(client, exact(client, 1)[0])
+                password = exact(client, exact(client, 1)[0])
+                assert username == b"sample-user" and password == b"sample-password"
+                client.sendall(b"\x01\x00")
+            else:
+                assert 0 in methods
+                client.sendall(b"\x05\x00")
             version, command, _, address_type = exact(client, 4)
             assert version == 5 and command == 1
             if address_type == 1:
@@ -72,7 +84,11 @@ class Upstream(socketserver.BaseRequestHandler):
                 raise ValueError("Unexpected address family")
             port = struct.unpack("!H", exact(client, 2))[0]
         else:
-            request = header(client).split(b"\r\n", 1)[0].decode()
+            headers = header(client)
+            if self.server.auth:
+                expected = b"Proxy-Authorization: Basic " + base64.b64encode(b"sample-user:sample-password")
+                assert expected.lower() in headers.lower()
+            request = headers.split(b"\r\n", 1)[0].decode()
             method, authority, _ = request.split()
             assert method == "CONNECT"
             address, port = authority.rsplit(":", 1)
@@ -180,19 +196,22 @@ def main():
             request_through(mixed, origin.server_port, protocol)
             checks.append(f"DIRECT via mixed {protocol}")
         revision = 1
-        for kind in ("socks5", "http"):
+        for kind, authenticated in (("socks5", False), ("http", False), ("socks5", True), ("http", True)):
             upstream = Server(("127.0.0.1", 0), Upstream)
             upstream.kind = kind
+            upstream.auth = authenticated
             upstream.hits = 0
             servers.append(upstream)
             threading.Thread(target=upstream.serve_forever, daemon=True).start()
             revision += 1
             candidate = config(mixed, {"name": "node_test", "type": kind, "server": "127.0.0.1",
                                        "port": upstream.server_address[1]})
+            if authenticated:
+                candidate["proxies"][0].update(username="sample-user", password="sample-password")
             assert call("apply", candidate, revision)["ok"]
             request_through(mixed, origin.server_port, "socks5")
             assert upstream.hits == 1
-            checks.append(f"PROXY via {kind} upstream")
+            checks.append(f"PROXY via {kind} upstream (auth={authenticated})")
         with socket.socket() as occupied:
             occupied.bind(("127.0.0.1", 0))
             occupied.listen()

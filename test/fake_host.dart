@@ -16,6 +16,8 @@ class FakeHost implements HostTransport {
     'selected': null,
   };
   bool failApply = false;
+  bool supportsSystemProxy = false;
+  bool failSystemProxy = false;
   Completer<void>? startGate;
   Completer<void>? startEntered;
   Completer<void>? applyGate;
@@ -33,12 +35,20 @@ class FakeHost implements HostTransport {
           'protocolVersion': 1,
           'coreVersion': '1.1.0',
           'hostVersion': 'test',
+          'systemProxy': supportsSystemProxy,
         },
       };
     }
     if (op == 'start') {
       startEntered?.complete();
       await startGate?.future;
+    }
+    if (op == 'enableSystemProxy' && failSystemProxy) {
+      return {
+        'ok': false,
+        'status': Map<String, dynamic>.from(status),
+        'error': {'code': 'SYSTEM_PROXY_FAILED', 'message': 'test WinINet failure'},
+      };
     }
     if (op == 'apply' && applyGate != null) {
       applyEntered?.complete();
@@ -70,6 +80,10 @@ class FakeHost implements HostTransport {
         'configHash': args['configHash'],
         'mixedPort': config['mixed-port'],
       };
+    } else if (op == 'enableSystemProxy') {
+      status = {...status, 'systemProxy': true};
+    } else if (op == 'disableSystemProxy') {
+      status = {...status, 'systemProxy': false};
     } else if (op == 'stop') {
       status = {
         ...status,
@@ -77,6 +91,7 @@ class FakeHost implements HostTransport {
         'appliedRevision': 0,
         'configHash': null,
         'mixedPort': null,
+        'systemProxy': false,
       };
     }
     return {'ok': true, 'result': Map<String, dynamic>.from(status)};

@@ -53,3 +53,38 @@ python tools/verify_research.py --docs-only
 5. 同一集成测试在 `emulator-5580`（Medium_Phone，Android 17 x86_64）通过：真实 JNI / 前台服务、HTTP 转发、配置回退，以及旧控制器销毁后重新接入同一 generation。无人值守测试通过 `adb shell pm grant io.flvpcore.app android.permission.POST_NOTIFICATIONS` 授予测试模拟器通知权限；不代表已复验拒绝通知权限场景。
 
 本轮没有验证真实 Android 手机、VPN/TUN、系统代理、长期后台保活或上游认证协议。统计累计值只在当前客户端进程内保存。
+
+## Windows 系统代理增量（2026-10-30）
+
+本轮实现当前用户 LAN WinINet 接管，能力和边界见 [Windows 文档](bridge-windows.md#6-系统代理与-tun-是两种接管方式)。实际通过：
+
+1. `flutter analyze` 无问题；`flutter test` 32 项通过。新增开关的能力协商、未启动拒绝、真实状态回显，以及失败不报成功的 store 检查。
+2. `cargo test --locked --manifest-path native/core-host/Cargo.toml --lib` 8 项通过；`cargo clippy ... --all-targets -- -D warnings` 通过。恢复测试使用可注入后端，覆盖 PAC/WPAD/手动原值、外部冲突、通知失败回滚、部分恢复重试与损坏日志。
+3. `python tools/verify_system_proxy.py` 在 Windows 真实 WinINet 上通过：独占锁、未运行拒绝、过期写操作、PAC/WPAD/手动代理恢复、端口变化、apply 失败回滚、stop/EOF 恢复、强杀后独立恢复进程、下次启动恢复、外部修改不覆盖。脚本短暂更改当前用户 LAN 设置，finally 恢复并读回确认原设置；不访问 Internet、不输出原 PAC URL。不要和其他会改变系统代理的测试并发运行。
+4. `python tools/verify_host.py --host native/core-host/target/debug/flvp-core-host.exe` 原有 10 项真实转发/生命周期检查通过。
+5. `flutter test integration_test/windows_smoke_test.dart -d windows --dart-define=VERIFY_SYSTEM_PROXY=true` 通过，覆盖设计 store → Dart bridge → Rust → WinINet 的真实开启、配置失败回退后保持接管、停止恢复，以及原有转发/流量/退出路径。默认集成测试不启用系统代理，需显式传该参数。
+
+未宣称验收：Android VPN、Windows TUN、Windows 全版本矩阵、同时杀死 UI/Host 后的即时恢复服务、多个自定义数据目录并行接管。用户原系统代理值已恢复；系统代理是当前运行状态，停止后不会下次自动开启。
+
+构建收尾：`tools/build_windows.ps1` 的正式入口 Release 与 `tools/build_android.ps1` 的 arm64-v8a/x86_64 Debug APK 均成功；Android 本轮仅构建验证，未重跑模拟器/真机运行。Release 宿主再次通过 `verify_host.py` 与 `verify_system_proxy.py --host native/core-host/target/release/flvp-core-host.exe`，并读回确认原 WinINet 设置已恢复。
+
+## Windows 配置仓库与仪表盘 TUN 开关（2026-10-30）
+
+按用户要求取消旧数据迁移计划，仅推进 Windows。实现范围与两个真实订阅的脱敏兼容性结论见 [Windows 配置仓库](windows-configurations.md)。本轮 `flutter analyze` 无问题、44 项 Flutter 测试通过，新增 `windows_configuration_test.dart -d windows` 的真实 A/B 上游切换与更新测试通过；TUN 开关仅为入口，不开放原生 TUN。两个用户订阅均已真实下载检查结构，但完整配置及协议认证仍超出本轮导入能力，不计作导入/节点连通成功。
+
+
+## Windows 协议认证与预检（2026-10-30）
+
+- `flutter analyze` 无问题；`flutter test` 48 项通过，包含九种协议序列化/编译、认证身份、严格拒绝、真实 Windows Debug 宿主契约。
+- `cargo test --locked --manifest-path native/core-host/Cargo.toml --lib` 10 项通过，clippy `--all-targets -- -D warnings` 通过。
+- `python tools/verify_host.py --host native/core-host/target/debug/flvp-core-host.exe` 12 项通过，含 HTTP Basic 和 SOCKS5 用户认证真实转发。
+- `cargo test --locked --manifest-path native/vendor/Cargo.toml -p vp-protocol loopback --target-dir native/core-host/target` 共 22 项通过。上游本地回环不等于公网互通。
+- Windows configuration 与 smoke 集成通过；`tools/build_windows.ps1` Release 成功；未构建 Android，未改系统代理设置。
+- 用户两份订阅内存探测：完整导入均拒绝；A 单节点校验 41/51、B 8/30；抽样 8 个 listener ready，HTTPS 成功 0/8。完整策略/DNS、指纹/端口跳跃、实际公网连接仍待完成，详见 [能力与探测记录](windows-configurations.md)。
+
+
+## Windows 策略组增量（2026-10-30）
+
+新增 typed 策略组、基础 Clash 规则/IPv6 CIDR、独立组选择和双层引用图校验。`flutter analyze` 无问题，52 项 Flutter 测试通过（包括实际 Windows host 的分流、故障转移、A→B 和重启保留选择）；Rust 10 项、clippy 与宿主 12 项转发检查通过。`integration_test/windows_policy_test.dart -d windows` 已验证下拉选择驱动真实上游 A→B，截图 `.artifacts/ui/windows-policy-groups.png` 已目视检查，无溢出；界面数据来自本地合成测试。
+
+真实订阅探测新增独立 curl 客户端：A 的 Hysteria、AnyTLS、SS 各一个样本 HTTPS 200 + 正文校验通过，8 个抽样合计 3 个成功。Dart HttpClient 仍 0/8，差异未定位。两个真实订阅完整导入仍未完成，能力边界见 [最新记录](windows-configurations.md)。未做 Android 构建，未修改用户系统代理。

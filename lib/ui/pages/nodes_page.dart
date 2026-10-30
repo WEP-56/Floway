@@ -75,6 +75,54 @@ class _FlvpNodesPageState extends State<FlvpNodesPage> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           spacing: 20,
           children: [
+            if (store.policyGroups.isNotEmpty) ...[
+              Text(
+                '规则模式按策略组分流；下方节点选择用于全局模式。',
+                style: flvpText(12, color: colors.ink3),
+              ),
+              for (final group in store.policyGroups)
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  spacing: 6,
+                  children: [
+                    Text(
+                      '${group.name} · ${group.type}',
+                      style: flvpText(13, color: colors.ink2),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    if (group.type == 'select')
+                      DropdownButtonFormField<String>(
+                        key: ValueKey('${group.id}:${group.selectedId}'),
+                        initialValue: group.selectedId,
+                        isExpanded: true,
+                        decoration: const InputDecoration(
+                          isDense: true,
+                          border: OutlineInputBorder(),
+                        ),
+                        items: [
+                          for (final member in group.members.entries)
+                            DropdownMenuItem(
+                              value: member.key,
+                              child: Text(
+                                member.value,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                        ],
+                        onChanged: (value) {
+                          if (value != null) {
+                            store.selectGroupMember(group.id, value);
+                          }
+                        },
+                      )
+                    else
+                      Text(
+                        '${group.members.length} 个成员 · 内核自动选择',
+                        style: flvpText(12, color: colors.ink3),
+                      ),
+                  ],
+                ),
+            ],
             if (mobile)
               Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -92,7 +140,8 @@ class _FlvpNodesPageState extends State<FlvpNodesPage> {
                       child: Transform.translate(
                         offset: const Offset(-16, 0),
                         child: ScrollConfiguration(
-                          behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
+                          behavior: ScrollConfiguration.of(context)
+                              .copyWith(scrollbars: false),
                           child: SingleChildScrollView(
                             scrollDirection: Axis.horizontal,
                             padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -125,7 +174,11 @@ class _FlvpNodesPageState extends State<FlvpNodesPage> {
                     FlvpIcon('Search', size: 26, color: colors.ink3),
                     Text(
                       '没有找到匹配的节点',
-                      style: flvpText(13.5, weight: FontWeight.w400, color: colors.ink3),
+                      style: flvpText(
+                        13.5,
+                        weight: FontWeight.w400,
+                        color: colors.ink3,
+                      ),
                     ),
                   ],
                 ),
@@ -153,7 +206,11 @@ class _FlvpNodesPageState extends State<FlvpNodesPage> {
     );
   }
 
-  Widget _nodeGrid(FlvpDesignStore store, List<NodeInfo> nodes, bool twoColumns) {
+  Widget _nodeGrid(
+    FlvpDesignStore store,
+    List<NodeInfo> nodes,
+    bool twoColumns,
+  ) {
     Widget row(NodeInfo node) => _NodeRow(
       node: node,
       selected: node.id == store.selectedNodeId,
@@ -251,7 +308,11 @@ class _SearchBarState extends State<_SearchBar> {
                   isCollapsed: true,
                   border: InputBorder.none,
                   hintText: '搜索节点或协议',
-                  hintStyle: flvpText(14, weight: FontWeight.w400, color: colors.ink3),
+                  hintStyle: flvpText(
+                    14,
+                    weight: FontWeight.w400,
+                    color: colors.ink3,
+                  ),
                 ),
               ),
             ),
@@ -272,7 +333,9 @@ class _SearchBarState extends State<_SearchBar> {
                       alignment: Alignment.center,
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
-                        color: hovered ? colors.inkLayer() : const Color(0x00000000),
+                        color: hovered
+                            ? colors.inkLayer()
+                            : const Color(0x00000000),
                       ),
                       child: FlvpIcon('X', size: 16, color: colors.ink2),
                     ),

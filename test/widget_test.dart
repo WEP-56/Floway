@@ -44,10 +44,10 @@ void main() {
           // Entrance animations start on the frame that mounts the modal.
           await tester.pump(const Duration(milliseconds: 500));
           await tester.pump(const Duration(milliseconds: 500));
-          expect(find.text('支持 Clash、Sing-box 与 V2Ray 订阅链接'), findsOneWidget);
+          expect(find.text('链接 / 本地文件 / 手动配置'), findsOneWidget);
           await tester.tap(find.text('取消'));
           await tester.pump(const Duration(milliseconds: 100));
-          expect(find.text('支持 Clash、Sing-box 与 V2Ray 订阅链接'), findsNothing);
+          expect(find.text('链接 / 本地文件 / 手动配置'), findsNothing);
         }
         if (page == 'settings') {
           await tester.tap(find.text('主题'));

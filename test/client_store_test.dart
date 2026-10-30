@@ -116,10 +116,46 @@ void main() {
       expect(store.settings.systemProxy, isFalse);
       store.setSettings((s) => s.copyWith(tunMode: true));
       expect(store.settings.tunMode, isFalse);
-      store.importSub('test', 'https://example.test/sub');
       expect(store.subs, isEmpty);
       expect(store.toast!.message, contains('尚未实现'));
       expect(host.operations, ['capabilities', 'status']);
+    },
+  );
+
+  test(
+    'system proxy requires a running listener and follows native state',
+    () async {
+      host.supportsSystemProxy = true;
+      // Capabilities were loaded during setup; initialize a fresh controller to
+      // exercise the Windows capability handshake.
+      store.dispose();
+      controller.dispose();
+      controller = ClientController(
+        store: controller.store,
+        bridge: CoreBridge(host),
+      );
+      store = FlvpClientStore(controller);
+      await store.initializeClient();
+
+      store.setSettings((s) => s.copyWith(systemProxy: true));
+      expect(store.settings.systemProxy, isFalse);
+      expect(store.toast!.message, contains('先启动'));
+
+      await store.toggleRunning();
+      store.setSettings((s) => s.copyWith(systemProxy: true));
+      await store.flushSettings();
+      expect(host.operations.last, 'enableSystemProxy');
+      expect(store.settings.systemProxy, isTrue);
+
+      store.setSettings((s) => s.copyWith(systemProxy: false));
+      await store.flushSettings();
+      expect(host.operations.last, 'disableSystemProxy');
+      expect(store.settings.systemProxy, isFalse);
+      host.failSystemProxy = true;
+      store.setSettings((s) => s.copyWith(systemProxy: true));
+      await store.flushSettings();
+      expect(store.settings.systemProxy, isFalse);
+      expect(store.toast!.message, contains('test WinINet failure'));
     },
   );
 

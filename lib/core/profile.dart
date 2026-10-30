@@ -1,9 +1,22 @@
 import 'dart:convert';
 import 'dart:io';
 
+part 'node_options.dart';
+part 'policy_group.dart';
+
 enum RoutingMode { rule, global, direct }
 
-enum NodeProtocol { socks5, http }
+enum NodeProtocol {
+  socks5,
+  http,
+  ss,
+  vmess,
+  vless,
+  trojan,
+  anytls,
+  hysteria,
+  hysteria2,
+}
 
 enum RuleKind {
   domain,
@@ -58,15 +71,18 @@ class ProxyNode {
     required this.protocol,
     required this.server,
     required this.port,
+    this.options = const NodeOptions(),
   });
   final String id;
   final String displayName;
   final NodeProtocol protocol;
   final String server;
   final int port;
+  final NodeOptions options;
   String get coreName => 'node_${id.replaceAll('-', '_')}';
 
   void validate() {
+    options.validate(protocol);
     requireConfig(validId(id), '节点 ID 必须是 UUID');
     requireConfig(
       displayName.trim().isNotEmpty && displayName.length <= 100,
@@ -89,6 +105,7 @@ class ProxyNode {
     'protocol': protocol.name,
     'server': server,
     'port': port,
+    'options': options.toJson(),
   };
 
   factory ProxyNode.fromJson(Object? value) {
@@ -98,6 +115,7 @@ class ProxyNode {
       'protocol',
       'server',
       'port',
+      'options',
     }, 'node');
     requireConfig(map['port'] is int, '节点端口必须是整数');
     final node = ProxyNode(
@@ -106,6 +124,7 @@ class ProxyNode {
       protocol: enumValue(NodeProtocol.values, map['protocol'], '节点协议'),
       server: jsonText(map, 'server'),
       port: map['port'] as int,
+      options: NodeOptions.fromJson(map['options'] ?? <String, dynamic>{}),
     );
     node.validate();
     return node;
@@ -223,11 +242,13 @@ class Profile {
     required this.displayName,
     required List<ProxyNode> nodes,
     required List<RuleSpec> rules,
+    List<PolicyGroup> groups = const [],
     this.revision = 1,
     this.mode = RoutingMode.rule,
     this.finalTargetId = directTarget,
   }) : nodes = List.unmodifiable(nodes),
-       rules = List.unmodifiable(rules);
+       rules = List.unmodifiable(rules),
+       groups = List.unmodifiable(groups);
 
   factory Profile.initial() => Profile(
     id: 'c40ba91d-1e63-46f0-8bab-74d0cb1159c0',
@@ -243,11 +264,13 @@ class Profile {
   final String finalTargetId;
   final List<ProxyNode> nodes;
   final List<RuleSpec> rules;
+  final List<PolicyGroup> groups;
 
   Profile copyWith({
     String? displayName,
     List<ProxyNode>? nodes,
     List<RuleSpec>? rules,
+    List<PolicyGroup>? groups,
     RoutingMode? mode,
     String? finalTargetId,
   }) => Profile(
@@ -258,6 +281,7 @@ class Profile {
     finalTargetId: finalTargetId ?? this.finalTargetId,
     nodes: nodes ?? this.nodes,
     rules: rules ?? this.rules,
+    groups: groups ?? this.groups,
   );
 
   void validate() {
@@ -276,12 +300,44 @@ class Profile {
       node.validate();
       requireConfig(ids.add(node.id), '节点 ID 重复');
     }
+    requireConfig(groups.length <= 64, '策略组不能超过 64 个');
+    final groupNames = <String>{};
+    for (final group in groups) {
+      group.validate();
+      requireConfig(ids.add(group.id), '节点/策略组 ID 重复');
+      requireConfig(groupNames.add(group.displayName), '策略组名称重复');
+    }
     final targets = {
       directTarget,
       rejectTarget,
       proxyTarget,
       ...nodes.map((n) => n.id),
+      ...groups.map((g) => g.id),
     };
+    final byId = {for (final g in groups) g.id: g};
+    final depths = <String, int>{}, visiting = <String>{};
+    int visit(String id) {
+      if (depths.containsKey(id)) return depths[id]!;
+      requireConfig(visiting.add(id), '策略组存在循环引用');
+      var height = 1;
+      for (final member in byId[id]!.members) {
+        requireConfig(
+          targets.contains(member) && member != proxyTarget,
+          '策略组成员不存在或引用了保留的全局选择器',
+        );
+        if (byId.containsKey(member)) {
+          final childHeight = 1 + visit(member);
+          if (childHeight > height) height = childHeight;
+        }
+      }
+      requireConfig(height <= 16, '策略组嵌套不能超过 16 层');
+      visiting.remove(id);
+      return depths[id] = height;
+    }
+
+    for (final group in groups) {
+      visit(group.id);
+    }
     requireConfig(targets.contains(finalTargetId), '最终规则目标不存在');
     final ruleIds = <String>{};
     for (final rule in rules) {
@@ -300,6 +356,7 @@ class Profile {
     'policy': {'mode': mode.name, 'finalTargetId': finalTargetId},
     'nodes': nodes.map((n) => n.toJson()).toList(),
     'rules': rules.map((r) => r.toJson()).toList(),
+    'groups': groups.map((g) => g.toJson()).toList(),
   };
 
   factory Profile.fromText(String text) {
@@ -317,6 +374,7 @@ class Profile {
       'policy',
       'nodes',
       'rules',
+      'groups',
     }, 'profile');
     requireConfig(
       map['format'] == 'flvp-profile' && map['schemaVersion'] == 1,
@@ -327,7 +385,10 @@ class Profile {
       'finalTargetId',
     }, 'policy');
     requireConfig(
-      map['revision'] is int && map['nodes'] is List && map['rules'] is List,
+      map['revision'] is int &&
+          map['nodes'] is List &&
+          map['rules'] is List &&
+          (!map.containsKey('groups') || map['groups'] is List),
       '配置字段类型无效',
     );
     final profile = Profile(
@@ -338,6 +399,7 @@ class Profile {
       finalTargetId: jsonText(policy, 'finalTargetId'),
       nodes: (map['nodes'] as List).map(ProxyNode.fromJson).toList(),
       rules: (map['rules'] as List).map(RuleSpec.fromJson).toList(),
+      groups: (map['groups'] as List? ?? []).map(PolicyGroup.fromJson).toList(),
     );
     profile.validate();
     return profile;

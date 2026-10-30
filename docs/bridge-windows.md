@@ -1,6 +1,6 @@
 # Windows 内核通信与生命周期
 
-状态：设计约定，尚未实现。上游事实对应 [调研 S4–S14](core-research.md)；共享配置和规则以 [configuration](configuration.md)、[rules](rules.md) 为准。
+状态：普通代理宿主及当前用户 WinINet 系统代理已实现，其余提权/TUN/路由与高级控制部分仍为设计。上游事实对应 [调研 S4–S14](core-research.md)；共享配置和规则以 [configuration](configuration.md)、[rules](rules.md) 为准。
 
 ## 1. 架构选择
 
@@ -100,6 +100,16 @@ HTTP 服务每连接处理一个请求后关闭；宿主必须容忍短连接。
 Wintun 与宿主架构匹配，放在只读安装目录；固定绝对加载路径和摘要。当前上游会探测环境变量、cwd、TEMP 等位置，提权宿主必须收窄加载来源，不能沿用宽泛搜索。安装器同时携带许可、驱动来源、校验和与卸载恢复逻辑。
 
 ## 6. 系统代理与 TUN 是两种接管方式
+
+2026-10-30 实现：`native/core-host/src/system_proxy.rs` 使用 `InternetQueryOptionW` / `InternetSetOptionW(INTERNET_OPTION_PER_CONNECTION_OPTION)`，读取 LAN 的 `FLAGS_UI`（含 PAC/WPAD）、手动代理地址、绕过与 PAC URL；设置 `DIRECT | PROXY`，禁用 PAC/自动发现并指向本实例 mixed 端口。写后发送刷新通知并读回核对。这里保存的是 WinINet 有效设置语义，不承诺恢复注册表键的原始字节布局或“不存在/空字符串”差别。没有修改 WinHTTP、RAS 连接、其他用户、路由或 DNS。
+
+恢复日志 `state/system-proxy.json`（schema 2）含原设置、写入设置、事务标识及 Windows 用户 SID，先 flush/sync 后发布再写 WinINet；它可能含用户原 PAC URL，应视为私有状态文件，不写入诊断日志。每个应用数据目录用 OS 文件锁 `state/network.lock` 限制一个宿主拥有恢复权；第二个实例拒绝写操作。正式入口使用同一个 path_provider 数据根，不支持通过多个自定义数据目录同时接管同一用户。
+
+桥接 v1 通过 capability `systemProxy` 协商新增 `enableSystemProxy` / `disableSystemProxy` 操作，沿用 generation/revision 校验；成功变更提升 generation。状态新增 `systemProxy`（实际设置仍匹配本实例）及 `systemProxyRecoveryError`。无数据目录或锁不可用时能力为 false。UI 只在内核已启动时允许开启，以成功回执更新；该开关表示当前接管状态，不持久化为自动连接偏好。
+
+运行中 apply 先恢复原设置，再关闭旧 listener；新 listener 验证后重新接管新端口，失败回滚到旧配置和旧端口。stop/EOF/正常 Drop 先恢复再关闭 listener；Dart 监测宿主退出后启动同一 exe 的 `--recover-system-proxy` 恢复入口；下次初始化也自动恢复。若 UI 和宿主同时被杀或断电，只保证下次启动恢复，不宣称存在常驻系统恢复服务。
+
+恢复逐字段只接受原值/本实例写入值（包括中断的部分写入），发现任一外部值则整组保留、显示冲突并保留日志。WinINet 无跨进程 compare-and-swap：读取与写入之间仍有极短竞争窗口；当前不提供强制覆盖/自动抢回功能。发生冲突需用户检查 Windows 代理设置与私有日志，不能用重试开启覆盖外部设置。TUN 仍不可用。
 
 普通代理首先验证 mixed HTTP/SOCKS5 可用，再设置**当前用户**系统代理。通过 WinINet 对应配置 API 修改并广播设置刷新；不能认为改注册表即已通知全部应用，也不能默认修改 WinHTTP 或其他用户设置。不是所有程序都遵循系统代理，这属于模式行为，应在产品内清楚表达。
 

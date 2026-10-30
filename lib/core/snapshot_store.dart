@@ -5,6 +5,7 @@ import 'package:path/path.dart' as p;
 import 'package:uuid/uuid.dart';
 
 import 'compiler.dart';
+import 'configuration_library.dart';
 import 'profile.dart';
 
 class RuntimeSnapshot {
@@ -51,6 +52,29 @@ class SnapshotStore {
     return Profile.fromText(await file.readAsString());
   }
 
+  Future<ConfigurationLibrary> loadLibrary() async {
+    final file = _state('client');
+    if (!await file.exists()) return ConfigurationLibrary();
+    final data = jsonDecode(await file.readAsString()) as Map<String, dynamic>;
+    return ConfigurationLibrary.fromJson(data['library']);
+  }
+
+  void _validateLibrary(
+    ConfigurationLibrary? library,
+    Profile profile,
+    String? selection,
+  ) {
+    library?.validate();
+    if (library?.active case final active?) {
+      requireConfig(
+        canonicalJson(active.profile.toJson()) ==
+                canonicalJson(profile.toJson()) &&
+            active.selectedNodeId == selection,
+        '活动配置与运行源不一致',
+      );
+    }
+  }
+
   Future<void> saveProfile(Profile profile) async {
     profile.validate();
     await _atomicJson(_state('profile'), profile.toJson());
@@ -93,9 +117,11 @@ class SnapshotStore {
   Future<void> saveClientState(
     Profile profile,
     int port,
-    String? selection,
-  ) async {
+    String? selection, {
+    ConfigurationLibrary? library,
+  }) async {
     profile.validate();
+    _validateLibrary(library, profile, selection);
     final device = _validateDevice({
       'mixedPort': port,
       'selectedNodeId': selection,
@@ -103,6 +129,7 @@ class SnapshotStore {
     await _atomicJson(_state('client'), {
       'profile': profile.toJson(),
       'device': device,
+      if (library != null) 'library': library.toJson(),
     });
   }
 
@@ -110,7 +137,9 @@ class SnapshotStore {
     CompiledConfig config, {
     required Profile profile,
     required String? selectedNodeId,
+    ConfigurationLibrary? library,
   }) async {
+    _validateLibrary(library, profile, selectedNodeId);
     final parent = Directory(p.join(root.path, 'runtime'));
     var revision = 0;
     await for (final entity in parent.list()) {
@@ -129,6 +158,7 @@ class SnapshotStore {
         'logicalHash': config.logicalHash,
         'compilerVersion': ConfigCompiler.version,
         'client': {
+          if (library != null) 'library': library.toJson(),
           'profile': profile.toJson(),
           'device': {
             'mixedPort': config.mixedPort,
@@ -142,12 +172,22 @@ class SnapshotStore {
     return RuntimeSnapshot(revision: revision, config: config);
   }
 
-  Future<void> beginApply(RuntimeSnapshot snapshot, int previousRevision) =>
-      _atomicJson(_state('pending'), {
-        'revision': snapshot.revision,
-        'runtimeHash': snapshot.config.runtimeHash,
-        'previousRevision': previousRevision,
-      });
+  Future<void> beginApply(
+    RuntimeSnapshot snapshot,
+    int previousRevision,
+  ) async {
+    // Non-active sources may have changed since the previous runtime snapshot.
+    // Keep the latest committed library when the host rolls back that runtime.
+    final previous = await _state('client').exists()
+        ? jsonDecode(await _state('client').readAsString())
+        : null;
+    await _atomicJson(_state('pending'), {
+      'revision': snapshot.revision,
+      'runtimeHash': snapshot.config.runtimeHash,
+      'previousRevision': previousRevision,
+      'previousClient': previous,
+    });
+  }
 
   Future<void> commit(int revision, String hash) async {
     // Verify the immutable bytes again before publishing the durable pointer.
@@ -162,9 +202,23 @@ class SnapshotStore {
       await File(p.join(root.path, 'runtime', '$revision', 'snapshot.json'))
           .readAsString(),
     ) as Map<String, dynamic>;
-    final client = metadata['client'] as Map<String, dynamic>;
+    var client = metadata['client'] as Map<String, dynamic>;
+    if (await hasPending()) {
+      final pending = jsonDecode(
+        await _state('pending').readAsString(),
+      ) as Map<String, dynamic>;
+      if (pending['previousRevision'] == revision &&
+          pending['previousClient'] is Map<String, dynamic>) {
+        client = pending['previousClient'] as Map<String, dynamic>;
+      }
+    }
     final profile = Profile.fromJson(client['profile']);
     final device = _validateDevice(client['device']);
+    _validateLibrary(
+      ConfigurationLibrary.fromJson(client['library']),
+      profile,
+      device['selectedNodeId'] as String?,
+    );
     final recompiled = const ConfigCompiler().compile(
       profile,
       mixedPort: device['mixedPort'] as int,

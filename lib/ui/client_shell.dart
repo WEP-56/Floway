@@ -891,7 +891,11 @@ class _NodeDialogState extends State<NodeDialog> {
               initialValue: _protocol,
               decoration: const InputDecoration(labelText: '协议（无认证）'),
               items: [
-                for (final protocol in NodeProtocol.values)
+                for (final protocol in {
+                  NodeProtocol.http,
+                  NodeProtocol.socks5,
+                  if (widget.node != null) widget.node!.protocol,
+                })
                   DropdownMenuItem(
                     value: protocol,
                     child: Text(protocol.name.toUpperCase()),
@@ -936,6 +940,9 @@ class _NodeDialogState extends State<NodeDialog> {
               protocol: _protocol,
               server: _server.text.trim(),
               port: int.tryParse(_port.text) ?? 0,
+              options: widget.node?.protocol == _protocol
+                  ? widget.node!.options
+                  : const NodeOptions(),
             );
             node.validate();
             Navigator.pop(context, node);

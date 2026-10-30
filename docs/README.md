@@ -6,13 +6,16 @@
 
 ## 阅读顺序
 
+最新 Windows 配置/订阅与 TUN 开关范围见 [Windows 配置仓库增量](windows-configurations.md)。当前按用户要求只推进 Windows，不做旧数据迁移。
+
 1. [vp_core 调研与能力边界](core-research.md)：版本、源码证据、阻塞项、FlClash 可借鉴范围。
-2. [统一配置管理](configuration.md)：跨端数据契约、订阅、资源、配置编译、事务与备份。
-3. [统一规则规范](rules.md)：真实支持范围、匹配顺序、规则集、平台差异与验收用例。
-4. [Windows 通信与生命周期](bridge-windows.md)：进程、REST、提权服务、系统代理、路由恢复。
-5. [Android 通信与生命周期](bridge-android.md)：VpnService、JNI/C ABI、FD、protect、后台与网络切换。
-6. [验证记录与复现方式](verification.md)：本轮实际执行结果和未验证范围。
-7. [M0.1 实施记录](m0-implementation.md)：当前可运行客户端与设计基线的对应关系、构建和验证。
+2. [vpn-parser 参考调研](client-reference-vpn-parser.md)：外置内核边界、VP-Core 适配链路、Windows 与 Android 实证。
+3. [统一配置管理](configuration.md)：跨端数据契约、订阅、资源、配置编译、事务与备份。
+4. [统一规则规范](rules.md)：真实支持范围、匹配顺序、规则集、平台差异与验收用例。
+5. [Windows 通信与生命周期](bridge-windows.md)：进程、REST、提权服务、系统代理、路由恢复。
+6. [Android 通信与生命周期](bridge-android.md)：VpnService、JNI/C ABI、FD、protect、后台与网络切换。
+7. [验证记录与复现方式](verification.md)：本轮实际执行结果和未验证范围。
+8. [M0.1 实施记录](m0-implementation.md)：当前可运行客户端与设计基线的对应关系、构建和验证。
 
 ## 文档用语
 

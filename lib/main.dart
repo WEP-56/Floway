@@ -34,7 +34,7 @@ Future<void> main() async {
     store: SnapshotStore(support),
     bridge: CoreBridge(
       Platform.isWindows
-          ? WindowsHostTransport()
+          ? WindowsHostTransport(supportDirectory: support.path)
           : const AndroidHostTransport(),
     ),
   );

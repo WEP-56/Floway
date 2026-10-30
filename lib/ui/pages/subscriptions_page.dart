@@ -45,7 +45,11 @@ class FlvpSubscriptionsPage extends StatelessWidget {
             Text(
               pc ? '点击右上角「导入订阅」添加' : '点击右下角按钮导入订阅',
               textAlign: TextAlign.center,
-              style: flvpText(12.5, weight: FontWeight.w400, color: colors.ink3),
+              style: flvpText(
+                12.5,
+                weight: FontWeight.w400,
+                color: colors.ink3,
+              ),
             ),
           ],
         ),
@@ -111,24 +115,22 @@ class _SubCardState extends State<_SubCard> {
   final LayerLink _link = LayerLink();
   OverlayEntry? _menu;
   bool _updating = false;
-  Timer? _timer;
 
   @override
   void dispose() {
-    _timer?.cancel();
     _menu?.remove();
     _menu?.dispose();
     super.dispose();
   }
 
-  void _update() {
+  Future<void> _update() async {
     if (_updating) return;
     setState(() => _updating = true);
-    _timer = Timer(const Duration(milliseconds: 1300), () {
-      if (!mounted) return;
-      setState(() => _updating = false);
-      FlvpStoreScope.read(context).refreshSub(widget.sub.id);
-    });
+    try {
+      await FlvpStoreScope.read(context).refreshSub(widget.sub.id);
+    } finally {
+      if (mounted) setState(() => _updating = false);
+    }
   }
 
   void _closeMenu() {
@@ -143,9 +145,26 @@ class _SubCardState extends State<_SubCard> {
     final store = FlvpStoreScope.read(context);
     final sub = widget.sub;
     final items = [
-      (icon: 'Copy', label: '复制链接', danger: false, run: () => store.notify('订阅链接已复制')),
-      (icon: 'Pencil', label: '编辑', danger: false, run: () => store.notify('编辑订阅暂未开放')),
-      (icon: 'Trash2', label: '删除', danger: true, run: () => store.removeSub(sub.id)),
+      if (sub.remote)
+        (
+          icon: 'Copy',
+          label: '复制链接',
+          danger: false,
+          run: () => unawaited(store.copySubscriptionUrl(sub.id)),
+        ),
+      (
+        icon: 'Pencil',
+        label: '编辑',
+        danger: false,
+        run: () => store.notify('编辑订阅暂未开放'),
+      ),
+      if (!sub.active)
+        (
+          icon: 'Trash2',
+          label: '删除',
+          danger: true,
+          run: () => store.removeSub(sub.id),
+        ),
     ];
     _menu = OverlayEntry(
       builder: (context) => FlvpThemeScope(
@@ -198,7 +217,9 @@ class _SubCardState extends State<_SubCard> {
     final low = ratio > 0.75;
     final daysLeft = _daysLeft(sub.expire);
     final expiring = daysLeft <= 30;
-    final muted = sub.active ? colors.onpcontainer.withValues(alpha: 0.75) : colors.ink3;
+    final muted = sub.active
+        ? colors.onpcontainer.withValues(alpha: 0.75)
+        : colors.ink3;
     final metaStyle = flvpText(12, weight: FontWeight.w400, color: muted);
 
     return FlvpCard(
@@ -247,21 +268,30 @@ class _SubCardState extends State<_SubCard> {
                               style: flvpText(
                                 15.5,
                                 weight: FontWeight.w600,
-                                color: sub.active ? colors.onpcontainer : colors.ink,
+                                color: sub.active
+                                    ? colors.onpcontainer
+                                    : colors.ink,
                               ),
                             ),
                           ),
                           if (sub.active) ...[
                             const SizedBox(width: 8),
                             Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 2,
+                              ),
                               decoration: BoxDecoration(
                                 color: colors.primary,
                                 borderRadius: BorderRadius.circular(999),
                               ),
                               child: Text(
                                 '使用中',
-                                style: flvpText(11, weight: FontWeight.w600, color: colors.onprimary),
+                                style: flvpText(
+                                  11,
+                                  weight: FontWeight.w600,
+                                  color: colors.onprimary,
+                                ),
                               ),
                             ),
                           ],
@@ -272,7 +302,11 @@ class _SubCardState extends State<_SubCard> {
                         sub.url,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: flvpText(12.5, weight: FontWeight.w400, color: muted),
+                        style: flvpText(
+                          12.5,
+                          weight: FontWeight.w400,
+                          color: muted,
+                        ),
                       ),
                     ],
                   ),
@@ -292,55 +326,72 @@ class _SubCardState extends State<_SubCard> {
               ),
             ],
           ),
-          const SizedBox(height: 16),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.baseline,
-            textBaseline: TextBaseline.alphabetic,
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Flexible(
-                child: Text.rich(
-                TextSpan(
-                  text: '已用 ',
+          if (sub.hasQuota) ...[
+            const SizedBox(height: 16),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.baseline,
+              textBaseline: TextBaseline.alphabetic,
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Flexible(
+                  child: Text.rich(
+                    TextSpan(
+                      text: '已用 ',
+                      style: flvpText(
+                        12.5,
+                        weight: FontWeight.w400,
+                        color: sub.active
+                            ? colors.onpcontainer.withValues(alpha: 0.85)
+                            : colors.ink2,
+                      ),
+                      children: [
+                        TextSpan(
+                          text: sub.used.toStringAsFixed(1),
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w600,
+                            fontFeatures: [FontFeature.tabularFigures()],
+                          ),
+                        ),
+                        TextSpan(text: ' / ${_trim(sub.total)} GB'),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  '剩余 ${left.toStringAsFixed(1)} GB',
                   style: flvpText(
                     12.5,
-                    weight: FontWeight.w400,
-                    color: sub.active ? colors.onpcontainer.withValues(alpha: 0.85) : colors.ink2,
+                    weight: FontWeight.w600,
+                    tabular: true,
+                    color: low
+                        ? colors.warn
+                        : (sub.active ? colors.onpcontainer : colors.ink2),
                   ),
-                  children: [
-                    TextSpan(
-                      text: sub.used.toStringAsFixed(1),
-                      style: const TextStyle(fontWeight: FontWeight.w600, fontFeatures: [FontFeature.tabularFigures()]),
-                    ),
-                    TextSpan(text: ' / ${_trim(sub.total)} GB'),
-                  ],
                 ),
-                ),
-              ),
-              const SizedBox(width: 8),
-              Text(
-                '剩余 ${left.toStringAsFixed(1)} GB',
-                style: flvpText(
-                  12.5,
-                  weight: FontWeight.w600,
-                  tabular: true,
-                  color: low ? colors.warn : (sub.active ? colors.onpcontainer : colors.ink2),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          SizedBox(
-            height: 10,
-            child: Center(
-              child: _updating
-                  ? const FlvpWavyProgress()
-                  : FlvpProgressBar(
-                      value: ratio,
-                      tone: low ? FlvpProgressTone.warn : FlvpProgressTone.primary,
-                    ),
+              ],
             ),
-          ),
+            const SizedBox(height: 10),
+            SizedBox(
+              height: 10,
+              child: Center(
+                child: _updating
+                    ? const FlvpWavyProgress()
+                    : FlvpProgressBar(
+                        value: ratio,
+                        tone: low
+                            ? FlvpProgressTone.warn
+                            : FlvpProgressTone.primary,
+                      ),
+              ),
+            ),
+          ] else ...[
+            const SizedBox(height: 16),
+            Text(
+              sub.remote ? '未提供流量 / 到期信息' : '本地配置 · 无订阅额度',
+              style: metaStyle,
+            ),
+          ],
           const SizedBox(height: 14),
           Row(
             spacing: 6,
@@ -351,25 +402,26 @@ class _SubCardState extends State<_SubCard> {
                   spacing: 16,
                   runSpacing: 4,
                   children: [
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      spacing: 6,
-                      children: [
-                        FlvpIcon(
-                          expiring ? 'TriangleAlert' : 'CalendarClock',
-                          size: 13,
-                          color: expiring ? colors.warn : muted,
-                        ),
-                        Text(
-                          expiring
-                              ? (daysLeft > 0 ? '$daysLeft 天后到期' : '已到期')
-                              : '到期 ${sub.expire}',
-                          style: expiring
-                              ? flvpText(12, color: colors.warn)
-                              : metaStyle,
-                        ),
-                      ],
-                    ),
+                    if (sub.expire.isNotEmpty)
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        spacing: 6,
+                        children: [
+                          FlvpIcon(
+                            expiring ? 'TriangleAlert' : 'CalendarClock',
+                            size: 13,
+                            color: expiring ? colors.warn : muted,
+                          ),
+                          Text(
+                            expiring
+                                ? (daysLeft > 0 ? '$daysLeft 天后到期' : '已到期')
+                                : '到期 ${sub.expire}',
+                            style: expiring
+                                ? flvpText(12, color: colors.warn)
+                                : metaStyle,
+                          ),
+                        ],
+                      ),
                     Row(
                       mainAxisSize: MainAxisSize.min,
                       spacing: 6,
@@ -384,14 +436,15 @@ class _SubCardState extends State<_SubCard> {
                   ],
                 ),
               ),
-              FlvpIconButton(
-                label: '更新订阅',
-                onPressed: _update,
-                icon: FlvpSpin(
-                  active: _updating,
-                  child: const FlvpIcon('RefreshCw', size: 18),
+              if (sub.remote)
+                FlvpIconButton(
+                  label: '更新订阅',
+                  onPressed: _update,
+                  icon: FlvpSpin(
+                    active: _updating,
+                    child: const FlvpIcon('RefreshCw', size: 18),
+                  ),
                 ),
-              ),
               if (!sub.active)
                 FlvpButton(
                   size: FlvpControlSize.sm,
@@ -407,8 +460,9 @@ class _SubCardState extends State<_SubCard> {
   }
 }
 
-String _trim(double value) =>
-    value == value.roundToDouble() ? value.toInt().toString() : value.toString();
+String _trim(double value) => value == value.roundToDouble()
+    ? value.toInt().toString()
+    : value.toString();
 
 class _PopMenu extends StatefulWidget {
   const _PopMenu({required this.items});
@@ -480,14 +534,24 @@ class _PopMenuItem extends StatelessWidget {
           duration: FlvpMotion.hover,
           height: 44,
           padding: const EdgeInsets.symmetric(horizontal: 16),
-          color: hovered ? colors.ink.withValues(alpha: 0.06) : const Color(0x00000000),
+          color: hovered
+              ? colors.ink.withValues(alpha: 0.06)
+              : const Color(0x00000000),
           child: Row(
             spacing: 12,
             children: [
-              FlvpIcon(icon, size: 17, color: danger ? colors.err : colors.ink2),
+              FlvpIcon(
+                icon,
+                size: 17,
+                color: danger ? colors.err : colors.ink2,
+              ),
               Text(
                 label,
-                style: flvpText(14, weight: FontWeight.w400, color: danger ? colors.err : colors.ink),
+                style: flvpText(
+                  14,
+                  weight: FontWeight.w400,
+                  color: danger ? colors.err : colors.ink,
+                ),
               ),
             ],
           ),
