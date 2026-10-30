@@ -1,0 +1,19 @@
+# Schema template only. VPN readiness requires the native adaptations in bridge-android.md.
+allow-lan: false
+bind-address: 127.0.0.1
+mode: rule
+log-level: info
+ipv6: false
+dns:
+  enable: true
+  nameserver:
+    - 1.1.1.1
+tun:
+  enable: true
+  auto-route: false
+  address: 198.18.0.1
+  netmask: 255.255.0.0
+  mtu: 1500
+  fake-ip-range: 198.18.0.0/16
+rules:
+  - MATCH,DIRECT

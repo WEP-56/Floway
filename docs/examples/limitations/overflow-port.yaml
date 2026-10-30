@@ -1,0 +1,8 @@
+# The string value is outside u16; the client must reject before conversion.
+proxies:
+  - name: overflow
+    type: socks5
+    server: 127.0.0.1
+    port: "65536"
+rules:
+  - MATCH,DIRECT

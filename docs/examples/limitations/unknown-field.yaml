@@ -1,0 +1,5 @@
+# Accepted by upstream parsing; this does not prove sniffer is implemented.
+sniffer:
+  enable: true
+rules:
+  - MATCH,DIRECT

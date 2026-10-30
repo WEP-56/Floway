@@ -1,0 +1,34 @@
+[package]
+name = "flvp-core-host"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[lib]
+name = "flvp_host"
+crate-type = ["rlib", "cdylib"]
+
+[[bin]]
+name = "flvp-core-host"
+path = "src/main.rs"
+
+[dependencies]
+vp-app = { git = "https://github.com/mateo-ki/vp_core", rev = "fa3e7430371930c440ffb1bdccc6869c63554a34" }
+vp-config = { git = "https://github.com/mateo-ki/vp_core", rev = "fa3e7430371930c440ffb1bdccc6869c63554a34" }
+vp-rule = { git = "https://github.com/mateo-ki/vp_core", rev = "fa3e7430371930c440ffb1bdccc6869c63554a34" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.10"
+tokio = { version = "1", features = ["rt-multi-thread", "time"] }
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+[target.'cfg(target_os = "android")'.dependencies]
+jni = "0.21"
+
+[profile.release]
+lto = "thin"
+strip = "symbols"
+
+[patch."https://github.com/mateo-ki/vp_core"]
+vp-protocol = { path = "../vendor/vp-protocol" }
+

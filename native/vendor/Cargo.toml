@@ -1,0 +1,120 @@
+[workspace]
+resolver = "2"
+members = ["vp-protocol"]
+
+[workspace.package]
+version = "1.1.0"
+edition = "2024"
+rust-version = "1.85"
+license = "MIT"
+
+[workspace.dependencies]
+# 内部 crate
+vp-common = { git = "https://github.com/mateo-ki/vp_core", rev = "fa3e7430371930c440ffb1bdccc6869c63554a34" }
+vp-core = { git = "https://github.com/mateo-ki/vp_core", rev = "fa3e7430371930c440ffb1bdccc6869c63554a34" }
+vp-config = { git = "https://github.com/mateo-ki/vp_core", rev = "fa3e7430371930c440ffb1bdccc6869c63554a34" }
+vp-rule = { git = "https://github.com/mateo-ki/vp_core", rev = "fa3e7430371930c440ffb1bdccc6869c63554a34" }
+vp-router = { git = "https://github.com/mateo-ki/vp_core", rev = "fa3e7430371930c440ffb1bdccc6869c63554a34" }
+vp-dns = { git = "https://github.com/mateo-ki/vp_core", rev = "fa3e7430371930c440ffb1bdccc6869c63554a34" }
+vp-transport = { git = "https://github.com/mateo-ki/vp_core", rev = "fa3e7430371930c440ffb1bdccc6869c63554a34" }
+vp-crypto = { git = "https://github.com/mateo-ki/vp_core", rev = "fa3e7430371930c440ffb1bdccc6869c63554a34" }
+vp-protocol = { git = "https://github.com/mateo-ki/vp_core", rev = "fa3e7430371930c440ffb1bdccc6869c63554a34" }
+vp-tun = { git = "https://github.com/mateo-ki/vp_core", rev = "fa3e7430371930c440ffb1bdccc6869c63554a34" }
+vp-plugin = { git = "https://github.com/mateo-ki/vp_core", rev = "fa3e7430371930c440ffb1bdccc6869c63554a34" }
+vp-plugin-sdk = { git = "https://github.com/mateo-ki/vp_core", rev = "fa3e7430371930c440ffb1bdccc6869c63554a34" }
+vp-app = { git = "https://github.com/mateo-ki/vp_core", rev = "fa3e7430371930c440ffb1bdccc6869c63554a34" }
+
+# 异步与 IO
+tokio = { version = "1", features = [
+    "rt-multi-thread",
+    "net",
+    "io-util",
+    "sync",
+    "time",
+    "macros",
+    "signal",
+    "fs",
+] }
+bytes = "1"
+async-trait = "0.1"
+pin-project-lite = "0.2"
+
+# 序列化 / 配置
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+serde_yaml = "0.9"
+json5 = "0.4"
+serde_path_to_error = "0.1"
+
+# 错误 / 日志
+thiserror = "2"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt", "ansi"] }
+
+# TLS
+rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12"] }
+ring = "0.17"
+tokio-rustls = { version = "0.26", default-features = false, features = ["ring", "tls12"] }
+rustls-pemfile = "2"
+webpki-roots = "0.26"
+
+# 密码学（RustCrypto 家族，保持小体积）
+md-5 = "0.10"
+sha3 = "0.10"
+sha1 = "0.10"
+sha2 = "0.10"
+hmac = "0.12"
+hkdf = "0.12"
+aes-gcm = "0.10"
+aes = "0.8"
+cfb-mode = "0.8"
+chacha20poly1305 = "0.10"
+poly1305 = "0.8"
+universal-hash = "0.5"
+blake3 = "1"
+blake2 = "0.10"
+base64 = "0.22"
+rand = "0.9"
+x25519-dalek = { version = "2.0.0-rc.3", default-features = false, features = ["static_secrets"] }
+
+# 网络
+httparse = "1"
+h2 = "0.4"
+quinn = "0.11"
+http = "1"
+tun = { version = "0.8", features = ["async"] }
+ipstack = "1.0"
+etherparse = "0.17"
+socket2 = "0.6"
+boringtun = { version = "0.6", default-features = false }
+smoltcp = { version = "0.11", default-features = false, features = ["std", "log", "medium-ip", "proto-ipv4", "proto-ipv6", "socket-tcp", "socket-udp"] }
+maxminddb = { version = "0.24", features = ["mmap"] }
+memmap2 = "0.9"
+mimalloc = { version = "0.1", default-features = false }
+
+# CLI
+ureq = { version = "2", features = ["tls"] }
+clap = { version = "4", features = ["derive", "std", "help", "usage", "error-context"] }
+
+# 插件宿主
+libloading = "0.8"
+
+# 规则正则（可裁剪）
+regex = "1"
+
+# 并发原语（RouterHandle 热替换对比基准用）
+arc-swap = "1"
+
+# 平台
+libc = "0.2"
+windows-sys = { version = "0.59", features = [
+    "Win32_Foundation",
+    "Win32_Networking_WinSock",
+    "Win32_NetworkManagement_IpHelper",
+    "Win32_System_Threading",
+    "Win32_System_ProcessStatus",
+] }
+
+# 仅测试
+rcgen = "0.13"
+

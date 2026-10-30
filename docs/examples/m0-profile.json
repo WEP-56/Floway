@@ -1,0 +1,12 @@
+{
+  "format": "flvp-profile",
+  "schemaVersion": 1,
+  "profileId": "c40ba91d-1e63-46f0-8bab-74d0cb1159c0",
+  "revision": 1,
+  "displayName": "M0 本地直连测试",
+  "policy": {"mode": "rule", "finalTargetId": "builtin:direct"},
+  "nodes": [],
+  "rules": [
+    {"id": "77bf1420-1849-4963-96c8-d836aa75a5c5", "kind": "domainSuffix", "value": "example.org", "targetId": "builtin:direct", "enabled": true, "noResolve": false}
+  ]
+}

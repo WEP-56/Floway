@@ -1,0 +1,19 @@
+mixed-port: 17890
+allow-lan: false
+bind-address: 127.0.0.1
+mode: rule
+log-level: info
+tun:
+  enable: false
+  auto-route: false
+rules:
+  - DOMAIN,exact.example.net,DIRECT
+  - DOMAIN-SUFFIX,example.org,DIRECT
+  - AND,((DOMAIN-SUFFIX,example.com),(NETWORK,TCP)),DIRECT
+  - SUB-RULE,(DOMAIN-SUFFIX,internal.example),internal
+  - IP-CIDR,10.0.0.0/8,DIRECT,no-resolve
+  - MATCH,REJECT
+sub-rules:
+  internal:
+    - DST-PORT,443,DIRECT
+    - MATCH,REJECT

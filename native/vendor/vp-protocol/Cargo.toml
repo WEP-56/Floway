@@ -1,0 +1,75 @@
+[package]
+name = "vp-protocol"
+description = "出入站协议：mixed/socks5/http 入站；direct/reject/socks5/http/ss/vmess/vless/trojan 出入站"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+vp-common.workspace = true
+vp-core.workspace = true
+vp-config.workspace = true
+vp-transport.workspace = true
+quinn.workspace = true
+boringtun.workspace = true
+smoltcp.workspace = true
+rustls.workspace = true
+ring.workspace = true
+webpki-roots.workspace = true
+rustls-pemfile.workspace = true
+http.workspace = true
+h2.workspace = true
+vp-crypto.workspace = true
+vp-dns.workspace = true
+vp-router.workspace = true
+vp-plugin.workspace = true
+vp-rule.workspace = true
+tokio.workspace = true
+bytes.workspace = true
+async-trait.workspace = true
+tracing.workspace = true
+httparse.workspace = true
+md-5.workspace = true
+sha1.workspace = true
+sha2.workspace = true
+sha3.workspace = true
+aes-gcm.workspace = true
+aes.workspace = true
+cfb-mode.workspace = true
+chacha20poly1305.workspace = true
+poly1305.workspace = true
+universal-hash.workspace = true
+blake3.workspace = true
+blake2.workspace = true
+base64.workspace = true
+hkdf.workspace = true
+hmac.workspace = true
+rand.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+serde_yaml.workspace = true
+regex.workspace = true
+
+[dev-dependencies]
+chacha20 = { version = "0.10", features = ["legacy"] }
+cipher = "0.5"
+log = "0.4"
+tracing-subscriber.workspace = true
+rcgen.workspace = true
+tokio = { workspace = true, features = ["test-util"] }
+
+[features]
+default = ["socks5", "http", "ss", "vmess", "vless", "trojan", "snell", "plugin", "geoip"]
+socks5 = []
+http = []
+ss = []
+vmess = []
+vless = []
+trojan = []
+snell = []
+plugin = []
+geoip = ["vp-rule/geoip"]
+
+[target.'cfg(target_os = "linux")'.dependencies]
+libc.workspace = true
