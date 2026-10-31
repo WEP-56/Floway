@@ -1,17 +1,9 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <uses-permission android:name="android.permission.INTERNET" />
-    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
     <application
         android:label="Floway"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
-        <service android:name=".ProxyService" android:exported="false"
-            android:stopWithTask="false" android:foregroundServiceType="specialUse">
-            <property android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
-                android:value="User-started loopback HTTP and SOCKS proxy for applications explicitly configured to use it; persists until user stops it. This service does not implement VPN capture." />
-        </service>
         <activity
             android:name=".MainActivity"
             android:exported="true"

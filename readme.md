@@ -4,6 +4,8 @@ This branch is the Flutter UI and design-system workspace for Floway. It keeps t
 
 The app currently launches with the UI's built-in preview data. Runtime integration will return here after `vp_core` stabilizes.
 
+The blue mark in `assets/branding/floway.png` is the active application icon. `assets/branding/floway-inactive.png` is reserved for a future inactive/error state and is not used by the current UI.
+
 ## Run
 
 ```powershell
