@@ -74,12 +74,22 @@ class NodeOptions {
     if (down != null) 'down': down,
   };
 
-  factory NodeOptions.fromJson(Object? value) {
-    final m = jsonObject(
-      value,
-      allowed.values.expand((v) => v).toSet(),
-      '节点参数',
-    );
+  factory NodeOptions.fromJson(
+    Object? value, {
+    void Function(String)? warn,
+    NodeProtocol? protocol,
+  }) {
+    requireConfig(value is Map, '节点参数必须是对象');
+    final m = Map<String, Object?>.from(value as Map);
+    final known = allowed.values.expand((v) => v).toSet();
+    final specific = protocol == null ? null : allowed[protocol];
+    for (final key in m.keys.toList()) {
+      if (!known.contains(key) ||
+          (specific != null && !specific.contains(key))) {
+        warn?.call('节点参数 $key 暂未接入，已忽略');
+        m.remove(key);
+      }
+    }
     String? text(String key) {
       if (!m.containsKey(key)) return null;
       requireConfig(m[key] is String, '节点 $key 必须是字符串');

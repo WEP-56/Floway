@@ -48,7 +48,7 @@ class PolicyGroup {
     );
     requireConfig(
       members.isNotEmpty &&
-          members.length <= 320 &&
+          members.length <= 1024 &&
           members.toSet().length == members.length,
       '策略组成员为空、重复或过多',
     );

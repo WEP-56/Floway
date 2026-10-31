@@ -65,28 +65,34 @@ class DnsOptions {
     },
   };
 
-  factory DnsOptions.fromJson(Object? value) {
-    final m = jsonObject(value, {
+  factory DnsOptions.fromJson(Object? value, {void Function(String)? warn}) {
+    requireConfig(value is Map, 'DNS 必须是对象');
+    final m = Map<String, Object?>.from(value as Map);
+    const known = {
       'enable',
       'ipv6',
       'enhanced-mode',
       'nameserver',
       'fallback',
       'fallback-filter',
-    }, 'DNS（Fake-IP、listen、respect-rules、default-nameserver、policy 尚未支持）');
+    };
+    for (final key in m.keys.toList()) {
+      if (!known.contains(key)) {
+        warn?.call('DNS 字段 $key 暂未接入，已忽略');
+        m.remove(key);
+      }
+    }
     requireConfig(m['enable'] is bool, 'DNS enable 必须是布尔值');
     if (m['enable'] == false) {
-      requireConfig(m.length == 1, '关闭 DNS 时不能携带会被忽略的自定义字段');
       return const DnsOptions.system();
     }
-    requireConfig(
-      !m.containsKey('ipv6') || m['ipv6'] == false,
-      '当前 DNS 仅支持 IPv4 查询（ipv6: false）',
-    );
-    requireConfig(
-      !m.containsKey('enhanced-mode') || m['enhanced-mode'] == 'redir-host',
-      '当前普通代理 DNS 仅支持 redir-host，尚不支持 Fake-IP',
-    );
+    if (m['ipv6'] == true) {
+      warn?.call('DNS ipv6: true 暂未接入，已按 IPv4 查询处理');
+    }
+    final enhanced = m['enhanced-mode'];
+    if (enhanced != null && enhanced != 'redir-host') {
+      warn?.call('DNS enhanced-mode $enhanced 暂未接入，已按 redir-host 处理');
+    }
     List<String> strings(String key) {
       final v = m[key] ?? (key == 'fallback' ? <String>[] : null);
       requireConfig(v is List && v.every((s) => s is String), 'DNS 上游必须为字符串列表');
@@ -101,7 +107,7 @@ class DnsOptions {
       nameservers: strings('nameserver'),
       fallbacks: strings('fallback'),
       filter: m.containsKey('fallback-filter')
-          ? DnsFallbackFilter.fromJson(m['fallback-filter'])
+          ? DnsFallbackFilter.fromJson(m['fallback-filter'], warn: warn)
           : null,
     );
     result.validate();
@@ -151,16 +157,22 @@ class DnsFallbackFilter {
     'domain': domains,
   };
 
-  factory DnsFallbackFilter.fromJson(Object? value) {
-    final m = jsonObject(value, {
-      'geoip',
-      'ipcidr',
-      'domain',
-    }, 'DNS fallback-filter');
-    requireConfig(
-      m['geoip'] == false,
-      'DNS fallback-filter 需要显式 geoip: false；Geo 资源尚未接入',
-    );
+  factory DnsFallbackFilter.fromJson(
+    Object? value, {
+    void Function(String)? warn,
+  }) {
+    requireConfig(value is Map, 'DNS fallback-filter 必须是对象');
+    final m = Map<String, Object?>.from(value as Map);
+    const known = {'geoip', 'ipcidr', 'domain'};
+    for (final key in m.keys.toList()) {
+      if (!known.contains(key)) {
+        warn?.call('DNS fallback-filter 字段 $key 暂未接入，已忽略');
+        m.remove(key);
+      }
+    }
+    if (m['geoip'] != false) {
+      warn?.call('DNS fallback-filter geoip 规则暂未接入，已忽略');
+    }
     List<String> strings(String key) {
       final v = m.containsKey(key) ? m[key] : <String>[];
       requireConfig(

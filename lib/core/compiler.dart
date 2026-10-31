@@ -125,7 +125,7 @@ class ConfigCompiler {
       ],
       'rules': rules,
     });
-    requireConfig(utf8.encode(text).length <= 512 * 1024, '生成的配置超过 512 KiB');
+    requireConfig(utf8.encode(text).length <= 1024 * 1024, '生成的配置超过 1 MiB');
     final logicalHash = contentHash(
       canonicalJson(<String, dynamic>{
         'compilerVersion': version,

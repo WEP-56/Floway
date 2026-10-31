@@ -400,7 +400,16 @@ class FlvpClientStore extends FlvpDesignStore {
       if (_disposed) return;
       _syncConfiguration(syncSettings: _draftVersion == version);
       completed = controller.error == null;
-      if (completed) notify(success);
+      if (completed) {
+        final ignored = controller.lastImportWarnings;
+        if (ignored.isEmpty) {
+          notify(success);
+        } else {
+          final head = ignored.take(3).join('；');
+          final more = ignored.length > 3 ? ' 等 ${ignored.length} 项' : '';
+          notify('$success；已忽略：$head$more');
+        }
+      }
     });
     return completed;
   }

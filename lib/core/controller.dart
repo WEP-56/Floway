@@ -31,6 +31,8 @@ class ClientController extends ChangeNotifier {
   int mixedPort = 17890;
   String? selectedNodeId = directTarget;
   String? error;
+  /// 最近一次导入/刷新被忽略的顶层字段、规则与 DNS 选项（逐项中文说明）。
+  List<String> lastImportWarnings = const [];
   CoreState? transition;
   bool initialized = false;
   bool busy = false;
@@ -251,6 +253,17 @@ class ClientController extends ChangeNotifier {
     library = candidateLibrary;
   }
 
+  static List<String> _compressWarnings(List<String> raw) {
+    final counts = <String, int>{};
+    for (final item in raw) {
+      counts[item] = (counts[item] ?? 0) + 1;
+    }
+    return List.unmodifiable([
+      for (final entry in counts.entries)
+        entry.value == 1 ? entry.key : '${entry.key}（${entry.value} 处）',
+    ]);
+  }
+
   Future<void> importConfiguration(
     String name,
     ConfigurationSourceKind kind, {
@@ -267,9 +280,15 @@ class ClientController extends ChangeNotifier {
         : text ?? canonicalJson(manualProfile!.toJson());
     final sourceId = const Uuid().v4();
     await ruleProviders.ensureFor(sourceId, original);
+    final warnings = <String>[];
     final parsed =
         manualProfile ??
-        const ConfigurationImporter().parse(original, name: name);
+        const ConfigurationImporter().parse(
+          original,
+          name: name,
+          warnings: warnings,
+        );
+    lastImportWarnings = _compressWarnings(warnings);
     await geoResources.ensureFor(parsed);
     final selected = parsed.nodes.firstOrNull?.id ?? directTarget;
     compiler.compile(parsed, mixedPort: mixedPort, selectedNodeId: selected);
@@ -329,10 +348,12 @@ class ClientController extends ChangeNotifier {
     final original = await const SubscriptionFetcher().fetch(old.url!);
     const importer = ConfigurationImporter();
     await ruleProviders.ensureFor(old.id, original);
+    final warnings = <String>[];
     final parsed = importer.reconcile(
-      importer.parse(original, name: old.name),
+      importer.parse(original, name: old.name, warnings: warnings),
       old,
     );
+    lastImportWarnings = _compressWarnings(warnings);
     await geoResources.ensureFor(parsed);
     compiler.compile(
       parsed,

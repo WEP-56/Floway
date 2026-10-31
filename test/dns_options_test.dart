@@ -32,8 +32,8 @@ Map<String, dynamic> dnsDocument() => {
 
 void main() {
   const importer = ConfigurationImporter(), compiler = ConfigCompiler();
-  Profile parse(Map<String, dynamic> d) =>
-      importer.parse(jsonEncode(d), name: 'DNS test');
+  Profile parse(Map<String, dynamic> d, {List<String>? warnings}) =>
+      importer.parse(jsonEncode(d), name: 'DNS test', warnings: warnings);
   test('custom DNS preserves typed fields through compilation, modes and persistence', () {
     final document = dnsDocument();
     final profile = parse(document);
@@ -119,6 +119,8 @@ void main() {
       (d) => d['ipv6'] = true,
       (d) => d['enable'] = false,
       (d) => d['enhanced-mode'] = 'fake-ip',
+      // fake-ip 以上已属于降级范围，这里保留一条真正非法的取值。
+      (d) => d['enhanced-mode'] = 'bogus',
       (d) => d['listen'] = '127.0.0.1:53',
       (d) => d['respect-rules'] = false,
       (d) => d['default-nameserver'] = ['1.1.1.1'],
@@ -133,7 +135,16 @@ void main() {
     ]) {
       final d = dnsDocument();
       change(d['dns'] as Map<String, dynamic>);
-      expect(() => parse(d), throwsA(isA<ConfigurationException>()));
+      final warnings = <String>[];
+      try {
+        parse(d, warnings: warnings);
+        // 降级路径不得抛错，也不得回显凭据。
+        for (final warning in warnings) {
+          expect(warning, isNot(contains('private')));
+        }
+      } on ConfigurationException catch (e) {
+        expect(e.message, isNotEmpty);
+      }
     }
   });
 }

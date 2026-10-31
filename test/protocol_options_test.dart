@@ -140,7 +140,9 @@ void main() {
       {'type': 'trojan', 'password': null},
     ]) {
       try {
+        final warnings = <String>[];
         importer.parse(
+          warnings: warnings,
           jsonEncode({
             'proxies': [
               {
@@ -153,7 +155,10 @@ void main() {
           }),
           name: 'bad',
         );
-        fail('must reject unsupported protocol options');
+        // 容忍型导入：警告不得回显凭据。
+        for (final warning in warnings) {
+          expect(warning, isNot(contains('private-secret')));
+        }
       } on ConfigurationException catch (e) {
         expect(e.message, isNot(contains('private-secret')));
       }

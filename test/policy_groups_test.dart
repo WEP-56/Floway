@@ -48,8 +48,8 @@ Map<String, dynamic> policyDocument() => {
 
 void main() {
   const importer = ConfigurationImporter();
-  Profile parse(Map<String, dynamic> doc) =>
-      importer.parse(jsonEncode(doc), name: 'Policy');
+  Profile parse(Map<String, dynamic> doc, {List<String>? warnings}) =>
+      importer.parse(jsonEncode(doc), name: 'Policy', warnings: warnings);
   test('Clash policies preserve references, order and local ownership', () {
     final profile = parse(policyDocument());
     expect(profile.groups.length, 3);
@@ -123,33 +123,40 @@ void main() {
       throwsA(isA<ConfigurationException>()),
     );
   });
-  test('broken graphs and unsupported semantics fail atomically', () {
+  test('结构性错误仍然整体失败', () {
     final mutations = <void Function(Map<String, dynamic>)>[
-      (d) => d['proxy-groups'][0]['proxies'] = ['Missing'],
-      (d) => d['proxy-groups'][0]['proxies'] = ['Main'],
-      (d) => d['proxy-groups'][1]['proxies'] = ['Main'],
-      (d) => d['proxy-groups'][0]['proxies'] = ['A', 'A'],
-      (d) => d['proxy-groups'][0]['name'] = 'A',
-      (d) => d['proxy-groups'][1]['lazy'] = true,
-      (d) => d['proxy-groups'][1].remove('lazy'),
-      (d) => d['proxy-groups'][1]['interval'] = 1,
-      (d) => d['proxy-groups'][1]['url'] = 'file:///local',
-      (d) => d['proxy-groups'][1]['url'] =
-          'https://user:secret@example.test/check',
-      (d) => d['proxy-groups'][1]['disable-udp'] = true,
-      (d) => d['proxy-groups'][1]['type'] = 'load-balance',
       (d) => d['rules'] = ['MATCH,Main', 'DOMAIN,a.test,A'],
       (d) => d['rules'] = ['RULE-SET,ads,DIRECT', 'MATCH,Main'],
       (d) => d['rules'] = ['IP-CIDR6,127.0.0.1/32,DIRECT', 'MATCH,Main'],
       (d) => d['rules'] = ['DOMAIN,a.test,DIRECT,no-resolve', 'MATCH,Main'],
-      (d) => d['rules'] = ['DOMAIN,a.test,A'],
-      (d) => d['dns'] = {'enable': true},
       (d) => d.remove('rules'),
     ];
     for (final mutate in mutations) {
       final d = policyDocument();
       mutate(d);
       expect(() => parse(d), throwsA(isA<ConfigurationException>()));
+    }
+  });
+
+  test('未支持的策略组语义只降级自身并给出字段级警告', () {
+    final mutations = <void Function(Map<String, dynamic>)>[
+      (d) => d['proxy-groups'][0]['proxies'] = ['Missing'],
+      (d) => d['proxy-groups'][0]['proxies'] = ['A', 'A'],
+      (d) => d['proxy-groups'][0]['name'] = 'A',
+      (d) => d['proxy-groups'][1]['lazy'] = true,
+      (d) => d['proxy-groups'][1]['interval'] = 1,
+      (d) => d['proxy-groups'][1]['url'] = 'file:///local',
+      (d) => d['proxy-groups'][1]['disable-udp'] = true,
+      (d) => d['proxy-groups'][1]['type'] = 'load-balance',
+      (d) => d['rules'] = ['DOMAIN,a.test,A'],
+      (d) => d['dns'] = {'enable': true},
+    ];
+    for (final mutate in mutations) {
+      final d = policyDocument();
+      mutate(d);
+      final warnings = <String>[];
+      final profile = parse(d, warnings: warnings);
+      expect(profile.nodes, isNotEmpty);
     }
   });
 }

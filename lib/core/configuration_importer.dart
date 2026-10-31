@@ -16,7 +16,7 @@ const maxImportBytes = 1024 * 1024;
 /// policy documents preserve references; node-only documents use PROXY.
 class ConfigurationImporter {
   const ConfigurationImporter();
-  Profile parse(String text, {required String name}) {
+  Profile parse(String text, {required String name, List<String>? warnings}) {
     requireConfig(utf8.encode(text).length <= maxImportBytes, '配置超过 1 MiB');
     final trimmed = text.trim().replaceFirst('\uFEFF', '');
     requireConfig(trimmed.isNotEmpty, '配置内容为空');
@@ -39,28 +39,31 @@ class ConfigurationImporter {
         return _uris(trimmed, name);
       }
       final yaml = loadYaml(trimmed);
-      requireConfig(
-        yaml is Map &&
-            yaml.keys.every(
-              (k) => {
-                'proxies',
-                'proxy-groups',
-                'rules',
-                'mode',
-                'mixed-port',
-                'port',
-                'socks-port',
-                'allow-lan',
-                'bind-address',
-                'external-controller',
-                'log-level',
-                'dns',
-                'rule-providers',
-              }.contains(k),
-            ),
-        '配置包含尚未支持的顶层字段；TUN、proxy-providers、sub-rules 及其他内核选项尚未开放',
-      );
-      final proxies = (yaml as Map)['proxies'];
+      requireConfig(yaml is Map, 'Clash 配置必须是对象');
+      // 真实订阅普遍携带 TUN、sniffer、profile 等顶层字段。单个未接入字段
+      // 不应让整份配置失败，改为逐字段提示并只降级该字段。
+      const supportedTop = {
+        'proxies',
+        'proxy-groups',
+        'rules',
+        'mode',
+        'mixed-port',
+        'port',
+        'socks-port',
+        'allow-lan',
+        'bind-address',
+        'external-controller',
+        'log-level',
+        'dns',
+        'rule-providers',
+      };
+      for (final key in (yaml as Map).keys) {
+        final field = '$key';
+        if (!supportedTop.contains(field)) {
+          warnings?.add('顶层字段 $field 暂未接入，已忽略');
+        }
+      }
+      final proxies = yaml['proxies'];
       requireConfig(
         proxies is List && proxies.isNotEmpty,
         'Clash proxies 必须为非空节点列表',
@@ -68,6 +71,7 @@ class ConfigurationImporter {
       final nodes = <ProxyNode>[];
       for (var i = 0; i < (proxies as List).length; i++) {
         final item = proxies[i];
+        try {
         requireConfig(item is Map, '第 ${i + 1} 个节点必须是对象');
         requireConfig(
           item['name'] is String &&
@@ -93,6 +97,24 @@ class ConfigurationImporter {
           );
           parameters['sni'] = parameters.remove('servername');
         }
+        const tlsImplied = {
+          NodeProtocol.trojan,
+          NodeProtocol.anytls,
+          NodeProtocol.hysteria,
+          NodeProtocol.hysteria2,
+        };
+        if (parameters['tls'] != true && !tlsImplied.contains(protocol)) {
+          // 未启用 TLS 时 sni/alpn 不生效，Clash 也只会在 TLS 下使用它们。
+          for (final key in [
+            'sni',
+            'alpn',
+            'client-fingerprint',
+            'skip-cert-verify',
+            'reality-opts',
+          ]) {
+            parameters.remove(key);
+          }
+        }
         if (protocol == NodeProtocol.hysteria) {
           for (final key in ['up', 'down']) {
             if (parameters[key] is String) {
@@ -105,21 +127,37 @@ class ConfigurationImporter {
             }
           }
         }
-        nodes.add(
-          ProxyNode(
-            id: const Uuid().v4(),
-            displayName: item['name'] as String,
+        final node = ProxyNode(
+          id: const Uuid().v4(),
+          displayName: item['name'] as String,
+          protocol: protocol,
+          server: item['server'] as String,
+          port: item['port'] as int,
+          options: NodeOptions.fromJson(
+            parameters,
+            warn: warnings?.add,
             protocol: protocol,
-            server: item['server'] as String,
-            port: item['port'] as int,
-            options: NodeOptions.fromJson(parameters),
           ),
         );
+        node.validate();
+        nodes.add(node);
+        } on ConfigurationException catch (error) {
+          final label = item is Map && item['name'] is String
+              ? item['name'] as String
+              : '第 ${i + 1} 个节点';
+          warnings?.add('节点 $label 已跳过：${error.message}');
+        }
+      }
+      requireConfig(nodes.isNotEmpty, '没有可导入的节点；所有节点的协议或参数暂未支持');
+      if (nodes.length > 1024) {
+        warnings?.add('节点数 ${nodes.length} 超过上限，仅导入前 1024 个');
+        nodes.removeRange(1024, nodes.length);
       }
       final profile = _nodeProfile(nodes, name);
       return _clashPolicy(
         jsonDecode(jsonEncode(yaml)) as Map<String, dynamic>,
         profile,
+        warnings: warnings,
       );
     } on ConfigurationException {
       rethrow;
@@ -129,7 +167,27 @@ class ConfigurationImporter {
     }
   }
 
-  Profile _clashPolicy(Map<String, dynamic> document, Profile base) {
+  /// DNS 开启但缺少 nameserver 在真实订阅里很常见，降级为系统 DNS。
+  DnsOptions _dnsFrom(Object? value, List<String>? warnings) {
+    if (value == null) return const DnsOptions.system();
+    if (value is Map) {
+      final nameservers = value['nameserver'];
+      final enabled = value['enable'] != false;
+      if (enabled && (nameservers is! List || nameservers.isEmpty)) {
+        warnings?.add('DNS 未提供 nameserver，已回退系统 DNS');
+        final copy = Map<String, Object?>.from(value);
+        copy['enable'] = false;
+        return DnsOptions.fromJson(copy, warn: warnings?.add);
+      }
+    }
+    return DnsOptions.fromJson(value, warn: warnings?.add);
+  }
+
+  Profile _clashPolicy(
+    Map<String, dynamic> document,
+    Profile base, {
+    List<String>? warnings,
+  }) {
     // Device-owned fields are type-checked but deliberately never applied.
     for (final key in ['mixed-port', 'port', 'socks-port']) {
       if (document.containsKey(key)) {
@@ -151,9 +209,18 @@ class ConfigurationImporter {
         '订阅本机设置字段类型无效',
       );
     }
-    final mode = document.containsKey('mode')
-        ? enumValue(RoutingMode.values, document['mode'], '模式')
-        : RoutingMode.rule;
+    // 订阅里常见大写 Rule/Global，按不区分大小写处理。
+    final modeValue = document['mode'];
+    RoutingMode mode = RoutingMode.rule;
+    if (modeValue != null) {
+      final text = '$modeValue'.trim().toLowerCase();
+      final found = RoutingMode.values.where((m) => m.name == text).firstOrNull;
+      if (found == null) {
+        warnings?.add('模式 $modeValue 暂未接入，已按 rule 处理');
+      } else {
+        mode = found;
+      }
+    }
     final groupData = document.containsKey('proxy-groups')
         ? document['proxy-groups']
         : [];
@@ -169,75 +236,154 @@ class ConfigurationImporter {
       requireConfig(!names.containsKey(node.displayName), '节点/策略组名称重复或使用保留名称');
       names[node.displayName] = node.id;
     }
+    const groupKeys = {
+      'name',
+      'type',
+      'proxies',
+      'url',
+      'interval',
+      'tolerance',
+      'lazy',
+    };
     final maps = <Map<String, dynamic>>[];
     for (final item in groupData as List) {
-      final m = jsonObject(item, {
-        'name',
-        'type',
-        'proxies',
-        'url',
-        'interval',
-        'tolerance',
-        'lazy',
-      }, 'Clash 策略组');
-      final name = jsonText(m, 'name');
-      requireConfig(!names.containsKey(name), '节点/策略组名称重复或使用保留名称');
+      if (item is! Map) {
+        warnings?.add('策略组必须是对象，已跳过一项');
+        continue;
+      }
+      final m = Map<String, dynamic>.from(
+        jsonDecode(jsonEncode(item)) as Map<String, dynamic>,
+      );
+      for (final key in m.keys.toList()) {
+        if (!groupKeys.contains(key)) {
+          warnings?.add('策略组 ${m['name']} 字段 $key 暂未接入，已忽略');
+          m.remove(key);
+        }
+      }
+      if (m['name'] is! String) {
+        warnings?.add('策略组缺少 name，已跳过一项');
+        continue;
+      }
+      final name = m['name'] as String;
+      if (names.containsKey(name)) {
+        warnings?.add('策略组名称 $name 与已有名称重复，已跳过');
+        continue;
+      }
       names[name] = const Uuid().v4();
       maps.add(m);
     }
-    String resolve(Object? name) {
-      requireConfig(
-        name is String && names.containsKey(name),
-        '规则或策略组引用了不存在的目标',
-      );
-      return names[name]!;
-    }
+    String? resolveOrNull(Object? name) => name is String ? names[name] : null;
 
     final groups = <PolicyGroup>[];
     for (final m in maps) {
+      final groupName = m['name'] as String;
       final kind = switch (m['type']) {
         'select' => GroupKind.select,
         'url-test' => GroupKind.urlTest,
         'fallback' => GroupKind.fallback,
-        _ => throw const ConfigurationException(
-          '当前策略组仅支持 select、url-test、fallback',
-        ),
+        _ => null,
       };
-      requireConfig(m['proxies'] is List, '策略组 proxies 必须是列表');
-      if (kind == GroupKind.select) {
-        requireConfig(
-          !['url', 'interval', 'tolerance', 'lazy'].any(m.containsKey),
-          'select 策略组不支持健康检查字段',
-        );
-      } else {
-        requireConfig(
-          m['lazy'] == false,
-          '当前内核自动策略组需要显式 lazy: false；惰性测速尚未完整支持',
-        );
-        requireConfig(m['url'] is String, '自动策略组需要健康检查 URL');
+      if (kind == null) {
+        warnings?.add('策略组 $groupName 类型 ${m['type']} 暂未接入，已跳过');
+        names.remove(groupName);
+        continue;
       }
-      requireConfig(
-        !m.containsKey('interval') || m['interval'] is int,
-        'interval 必须是整数',
-      );
-      requireConfig(
-        !m.containsKey('tolerance') || m['tolerance'] is int,
-        'tolerance 必须是整数',
-      );
-      final members = (m['proxies'] as List).map(resolve).toList();
+      if (m['proxies'] is! List) {
+        warnings?.add('策略组 $groupName 缺少 proxies，已跳过');
+        names.remove(groupName);
+        continue;
+      }
+      if (kind == GroupKind.select &&
+          ['url', 'interval', 'tolerance', 'lazy'].any(m.containsKey)) {
+        warnings?.add('策略组 $groupName 为 select，健康检查字段已忽略');
+      }
+      if (kind != GroupKind.select && m['lazy'] == true) {
+        warnings?.add('策略组 $groupName 的 lazy 暂未接入，已按立即测速');
+      }
+      var interval = m['interval'] is int ? m['interval'] as int : 300;
+      if (interval < 60) {
+        warnings?.add('策略组 $groupName 的 interval 过小，已调整为 60');
+        interval = 60;
+      }
+      var tolerance = m['tolerance'] is int ? m['tolerance'] as int : 0;
+      if (tolerance < 0) {
+        warnings?.add('策略组 $groupName 的 tolerance 无效，已调整为 0');
+        tolerance = 0;
+      }
+      var healthUrl = m['url'] is String ? m['url'] as String : null;
+      if (kind != GroupKind.select) {
+        final uri = healthUrl == null ? null : Uri.tryParse(healthUrl);
+        if (uri == null ||
+            !['http', 'https'].contains(uri.scheme) ||
+            uri.userInfo.isNotEmpty) {
+          warnings?.add('策略组 $groupName 的健康检查 URL 无效，已使用默认地址');
+          healthUrl = 'https://www.gstatic.com/generate_204';
+        }
+      }
+      final members = <String>[];
+      for (final target in m['proxies'] as List) {
+        final id = target is String ? names[target] : null;
+        if (id == null) {
+          warnings?.add('策略组 $groupName 引用了未导入的 ${target ?? 'null'}，已移除');
+          continue;
+        }
+        if (members.contains(id)) {
+          warnings?.add('策略组 $groupName 存在重复成员，已去重');
+          continue;
+        }
+        members.add(id);
+      }
+      if (members.isEmpty) {
+        warnings?.add('策略组 $groupName 没有可用成员，已跳过');
+        names.remove(groupName);
+        continue;
+      }
       groups.add(
         PolicyGroup(
-          id: names[m['name']]!,
-          displayName: m['name'] as String,
+          id: names[groupName]!,
+          displayName: groupName,
           kind: kind,
           members: members,
           selectedId: kind == GroupKind.select ? members.firstOrNull : null,
-          url: m['url'] as String?,
-          interval: m['interval'] as int? ?? 300,
-          tolerance: m['tolerance'] as int? ?? 0,
+          url: healthUrl,
+          interval: interval,
+          tolerance: tolerance,
         ),
       );
     }
+    // 被跳过的策略组可能已被其他组引用，这里再做一次引用清理。
+    final validTargets = {
+      directTarget,
+      rejectTarget,
+      ...base.nodes.map((node) => node.id),
+      ...groups.map((group) => group.id),
+    };
+    final cleaned = <PolicyGroup>[];
+    for (final group in groups) {
+      final members = group.members.where(validTargets.contains).toList();
+      if (members.isEmpty) {
+        warnings?.add('策略组 ${group.displayName} 没有可用成员，已跳过');
+        continue;
+      }
+      final selected = group.selectedId != null && members.contains(group.selectedId)
+          ? group.selectedId
+          : (group.kind == GroupKind.select ? members.first : null);
+      cleaned.add(
+        PolicyGroup(
+          id: group.id,
+          displayName: group.displayName,
+          kind: group.kind,
+          members: members,
+          selectedId: selected,
+          url: group.url,
+          interval: group.interval,
+          tolerance: group.tolerance,
+        ),
+      );
+    }
+    groups
+      ..clear()
+      ..addAll(cleaned);
     final rules = <RuleSpec>[];
     var finalTarget = proxyTarget;
     if (document.containsKey('rules')) {
@@ -258,15 +404,13 @@ class ConfigurationImporter {
             fields.length == 2 && i == raw.length - 1,
             'MATCH 必须唯一且位于末尾',
           );
-          finalTarget = resolve(fields[1]);
+          finalTarget = resolveOrNull(fields[1]) ?? proxyTarget;
+          if (resolveOrNull(fields[1]) == null) {
+            warnings?.add('MATCH 目标 ${fields[1]} 未导入，已回退到首个节点');
+          }
           matched = true;
           continue;
         }
-        requireConfig(
-          fields.length == 3 ||
-              (fields.length == 4 && fields[3] == 'no-resolve'),
-          '规则字段数量或修饰符无效',
-        );
         final kind = switch (fields.first) {
           'DOMAIN' => RuleKind.domain,
           'DOMAIN-SUFFIX' => RuleKind.domainSuffix,
@@ -277,10 +421,17 @@ class ConfigurationImporter {
           'GEOIP' => RuleKind.geoIp,
           'GEOSITE' => RuleKind.geoSite,
           'RULE-SET' => RuleKind.ruleSet,
-          _ => throw const ConfigurationException(
-            '规则类型尚未支持；PROCESS-NAME、逻辑规则与内核高级匹配尚未接入',
-          ),
+          _ => null,
         };
+        if (kind == null) {
+          warnings?.add('规则类型 ${fields.first} 暂未接入，已跳过：${raw[i]}');
+          continue;
+        }
+        requireConfig(
+          fields.length == 3 ||
+              (fields.length == 4 && fields[3] == 'no-resolve'),
+          '规则字段数量或修饰符无效',
+        );
         if (fields.first == 'RULE-SET') {
           final providers = document['rule-providers'];
           requireConfig(
@@ -295,6 +446,11 @@ class ConfigurationImporter {
             'IP-CIDR6 需要 IPv6 网段',
           );
         }
+        final targetId = resolveOrNull(fields[2]);
+        if (targetId == null) {
+          warnings?.add('规则目标 ${fields[2]} 未导入，已跳过：${raw[i]}');
+          continue;
+        }
         rules.add(
           RuleSpec(
             id: const Uuid().v4(),
@@ -302,19 +458,19 @@ class ConfigurationImporter {
             value: fields.first == 'GEOIP'
                 ? fields[1].toUpperCase()
                 : fields[1],
-            targetId: resolve(fields[2]),
+            targetId: targetId,
             noResolve: fields.length == 4,
           ),
         );
       }
-      requireConfig(matched, '完整规则配置需要显式最终 MATCH');
+      if (!matched) {
+        warnings?.add('规则缺少最终 MATCH，未命中流量按首个节点处理');
+      }
     } else {
       requireConfig(groups.isEmpty, '包含策略组的配置必须提供显式 rules/MATCH');
     }
     final result = base.copyWith(
-      dns: document.containsKey('dns')
-          ? DnsOptions.fromJson(document['dns'])
-          : const DnsOptions.system(),
+      dns: _dnsFrom(document['dns'], warnings),
       groups: groups,
       rules: rules,
       mode: mode,
@@ -347,10 +503,30 @@ class ConfigurationImporter {
 
   Profile _nodeProfile(List<ProxyNode> nodes, String name) {
     requireConfig(nodes.isNotEmpty, '配置没有可用节点');
-    final identities = <String>{};
+    // 真实订阅常出现同端点多名称、或同名多节点：端点允许重复，名称去重。
+    final used = <String>{};
+    final unique = <ProxyNode>[];
     for (final node in nodes) {
-      requireConfig(identities.add(identity(node)), '存在连接参数完全相同的重复节点，无法可靠区分身份');
+      var display = node.displayName;
+      var suffix = 2;
+      while (!used.add(display)) {
+        display = '${node.displayName} #$suffix';
+        suffix += 1;
+      }
+      unique.add(
+        display == node.displayName
+            ? node
+            : ProxyNode(
+                id: node.id,
+                displayName: display,
+                protocol: node.protocol,
+                server: node.server,
+                port: node.port,
+                options: node.options,
+              ),
+      );
     }
+    nodes = unique;
     final profile = Profile(
       id: const Uuid().v4(),
       displayName: name,
@@ -384,16 +560,32 @@ class ConfigurationImporter {
 
   /// Endpoint identity, never a display name. Remap rule references too.
   Profile reconcile(Profile parsed, ConfigurationSource old) {
-    final oldIds = <String, String>{};
-    final seen = <String>{};
+    // 同一端点多条目是常态：按身份分组，优先同名，再按出现顺序配对。
+    final oldByKey = <String, List<ProxyNode>>{};
     for (final n in old.profile.nodes) {
-      requireConfig(!oldIds.containsKey(identity(n)), '旧配置存在重复节点身份，无法自动更新');
-      oldIds[identity(n)] = n.id;
+      oldByKey.putIfAbsent(identity(n), () => <ProxyNode>[]).add(n);
     }
+    final usedOld = <String>{};
     final ids = <String, String>{};
     for (final n in parsed.nodes) {
-      requireConfig(seen.add(identity(n)), '更新包含重复节点身份');
-      ids[n.id] = oldIds[identity(n)] ?? const Uuid().v4();
+      final candidates = oldByKey[identity(n)];
+      String? matched;
+      if (candidates != null) {
+        for (final candidate in candidates) {
+          if (!usedOld.contains(candidate.id) &&
+              candidate.displayName == n.displayName) {
+            matched = candidate.id;
+            break;
+          }
+        }
+        matched ??= candidates
+            .where((candidate) => !usedOld.contains(candidate.id))
+            .firstOrNull
+            ?.id;
+      }
+      final id = matched ?? const Uuid().v4();
+      usedOld.add(id);
+      ids[n.id] = id;
     }
     final previousGroups = {
       for (final g in old.profile.groups) '${g.kind.name}|${g.displayName}': g,

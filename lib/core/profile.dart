@@ -324,7 +324,7 @@ class Profile {
       displayName.trim().isNotEmpty && displayName.length <= 100,
       '配置名称无效',
     );
-    requireConfig(nodes.length <= 256 && rules.length <= 4095, '超出当前版本配置数量上限');
+    requireConfig(nodes.length <= 1024 && rules.length <= 8192, '超出当前版本配置数量上限');
     final ids = <String>{};
     for (final node in nodes) {
       node.validate();

@@ -278,7 +278,7 @@ void main() {
 
       final oldRevision = c.status.appliedRevision;
       final broken = jsonDecode(jsonEncode(document)) as Map<String, dynamic>;
-      broken['dns']['enhanced-mode'] = 'fake-ip';
+      broken['dns']['nameserver'] = ['bogus host'];
       final valid = document;
       document = broken;
       await c.refreshConfiguration(sourceId);

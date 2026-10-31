@@ -120,7 +120,7 @@ fn validate_groups(cfg: &OrdinaryConfig) -> Result<(), String> {
     }
     for g in &cfg.proxy_groups {
         if g.proxies.is_empty()
-            || g.proxies.len() > 320
+            || g.proxies.len() > 1024
             || g.proxies.iter().collect::<HashSet<_>>().len() != g.proxies.len()
             || g.proxies.iter().any(|n| {
                 !names.contains(n.as_str())
@@ -214,8 +214,8 @@ fn validate_groups(cfg: &OrdinaryConfig) -> Result<(), String> {
 }
 
 pub fn validate(text: &str) -> Result<u16, String> {
-    if text.len() > 512 * 1024 {
-        return Err("Runtime configuration exceeds 512 KiB".into());
+    if text.len() > 1024 * 1024 {
+        return Err("Runtime configuration exceeds 1 MiB".into());
     }
     let cfg: OrdinaryConfig = serde_json::from_str(text)
         .map_err(|_| "Configuration contains invalid or unsupported fields".to_owned())?;
@@ -231,7 +231,7 @@ pub fn validate(text: &str) -> Result<u16, String> {
         return Err("Only loopback ordinary proxy mode is available in this build".into());
     }
     cfg.dns.validate()?;
-    if cfg.proxies.len() > 256 || cfg.rules.len() > 4096 {
+    if cfg.proxies.len() > 1024 || cfg.rules.len() > 8192 {
         return Err("Configuration exceeds this milestone's resource limits".into());
     }
     for proxy in &cfg.proxies {

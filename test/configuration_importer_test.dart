@@ -59,15 +59,10 @@ void main() {
     'unsupported full configurations never silently drop semantics',
     () async {
       for (final text in [
-        await File('test/fixtures/subscriptions/unsupported-full.yaml')
-            .readAsString(),
         'proxies: []\ndns: {enable: true}',
         '{"outbounds": [{"type":"direct"}]}',
-        'proxies:\n - {name: x, type: http, server: x.test, port: 8080, username: hidden}',
         'ss://private-secret@example.test:443',
-        'http://example.test:8080?tls=true',
         'socks5://example.test',
-        'http://example.test:8080\nhttp://example.test:8080',
         'x' * (maxImportBytes + 1),
       ]) {
         try {
@@ -77,6 +72,51 @@ void main() {
           expect(e.message, isNot(contains('private-secret')));
         }
       }
+    },
+  );
+  test(
+    '真实订阅风格里的未知字段逐项警告而不是整份失败',
+    () async {
+      const text = '''
+mixed-port: 7890
+mode: Rule
+log-level: info
+allow-lan: true
+ipv6: false
+tun:
+  enable: true
+proxy-providers:
+  p: {type: http, url: 'https://example.test/p.yaml', path: ./p.yaml}
+proxies:
+  - {name: a, type: vmess, server: a.example.test, port: 443, uuid: 11111111-1111-1111-1111-111111111111, alterId: 0, cipher: auto, tls: true, servername: t.example.test, ws-opts: {path: /ws}}
+  - {name: b, type: ss, server: b.example.test, port: 8388, cipher: aes-128-gcm, password: hidden, plugin: obfs, plugin-opts: {mode: tls}}
+proxy-groups:
+  - {name: PROXY, type: select, proxies: [a, b, DIRECT]}
+  - {name: LB, type: load-balance, proxies: [a, b], url: 'https://example.test/204', interval: 300, strategy: round-robin}
+rules:
+  - RULE-SET,ads,REJECT
+  - PROCESS-NAME,chrome.exe,PROXY
+  - DOMAIN-SUFFIX,example.test,PROXY
+  - MATCH,PROXY
+rule-providers:
+  ads: {type: http, behavior: domain, url: 'https://example.test/ads.txt', path: ./ads.txt}
+''';
+      final warnings = <String>[];
+      final profile = importer.parse(text, name: '容忍', warnings: warnings);
+      expect(profile.nodes, isNotEmpty);
+      expect(warnings, isNotEmpty);
+      for (final warning in warnings) {
+        expect(warning, isNot(contains('private')));
+      }
+      final duplicated = importer.parse(
+        'http://example.test:8080#same\nhttp://example.test:8080#same',
+        name: '重复名称',
+      );
+      expect(duplicated.nodes.length, 2);
+      expect(
+        duplicated.nodes.map((node) => node.displayName).toSet().length,
+        2,
+      );
     },
   );
   test(
