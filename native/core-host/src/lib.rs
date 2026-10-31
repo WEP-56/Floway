@@ -3,6 +3,7 @@
 
 mod config;
 mod dns;
+mod geo;
 mod node_options;
 mod system_proxy;
 
@@ -567,6 +568,20 @@ mod tests {
         );
         let stale = host.request(r#"{"requestId":"stale","operation":"stop","expectedGeneration":9,"expectedAppliedRevision":0}"#);
         assert_eq!(stale["error"]["code"], "STATE_CONFLICT");
+    }
+
+    #[test]
+    fn geo_rules_need_local_databases() {
+        // SAFETY: 测试进程内单线程设置环境变量，不改动其它全局状态。
+        unsafe { std::env::set_var("FLVP_GEO_DIR", "C:/__flvp_missing_geo__") };
+        let args = arguments(port(), 1);
+        let mut config: Value = serde_json::from_str(args["config"].as_str().unwrap()).unwrap();
+        config["rules"] = json!(["GEOIP,CN,DIRECT", "MATCH,DIRECT"]);
+        let error = config::validate(&config.to_string()).unwrap_err();
+        assert!(error.contains("geoip.dat"), "{error}");
+        config["rules"] = json!(["GEOSITE,cn,DIRECT", "MATCH,DIRECT"]);
+        let error = config::validate(&config.to_string()).unwrap_err();
+        assert!(error.contains("geosite.dat"), "{error}");
     }
 
     #[test]

@@ -262,7 +262,9 @@ pub fn validate(text: &str) -> Result<u16, String> {
         if (ty == "MATCH" && fields.len() != 2)
             || (ty != "MATCH"
                 && fields.len() != 3
-                && !(ty == "IP-CIDR" && fields.len() == 4 && fields[3] == "no-resolve"))
+                && !((ty == "IP-CIDR" || ty == "GEOIP")
+                    && fields.len() == 4
+                    && fields[3] == "no-resolve"))
             || fields
                 .iter()
                 .any(|v| v.is_empty() || v.chars().any(char::is_whitespace))
@@ -278,9 +280,34 @@ pub fn validate(text: &str) -> Result<u16, String> {
                 | "NETWORK"
                 | "DST-PORT"
                 | "MATCH"
+                | "GEOIP"
+                | "GEOSITE"
         ) || (ty == "MATCH" && index + 1 != cfg.rules.len())
         {
             return Err("Unknown, unsupported or unreachable rule".into());
+        }
+    }
+    let geo = crate::geo::GeoData::load();
+    for rule in &cfg.rules {
+        let fields: Vec<_> = rule.split(',').collect();
+        match fields[0] {
+            "GEOIP" => {
+                let Some(found) = geo.has_geoip(fields[1]) else {
+                    return Err("GEOIP rules require geoip.dat in the data directory".into());
+                };
+                if !found {
+                    return Err(format!("Unknown GEOIP category {}", fields[1]));
+                }
+            }
+            "GEOSITE" => {
+                let Some(found) = geo.has_geosite(fields[1]) else {
+                    return Err("GEOSITE rules require geosite.dat in the data directory".into());
+                };
+                if !found {
+                    return Err(format!("Unknown GEOSITE category {}", fields[1]));
+                }
+            }
+            _ => {}
         }
     }
     let upstream = vp_config::parse_and_validate(text, vp_config::Format::Json)
@@ -306,8 +333,8 @@ pub fn validate(text: &str) -> Result<u16, String> {
         &upstream.rules,
         &vp_rule::CompileEnv {
             is_known_target: &known,
-            geosite: &None,
-            geoip: &None,
+            geosite: &geo.geosite,
+            geoip: &geo.geoip,
             asn: &None,
             providers: &HashMap::new(),
             sub_rules: &HashMap::new(),

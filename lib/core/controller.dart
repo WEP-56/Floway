@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 
@@ -7,8 +8,10 @@ import 'compiler.dart';
 import 'configuration_library.dart';
 import 'configuration_importer.dart';
 
+import 'package:path/path.dart' as p;
 import 'package:uuid/uuid.dart';
 
+import 'geo_resources.dart';
 import 'profile.dart';
 import 'snapshot_store.dart';
 import 'transport.dart';
@@ -18,6 +21,8 @@ class ClientController extends ChangeNotifier {
   final SnapshotStore store;
   final CoreBridge bridge;
   final compiler = const ConfigCompiler();
+  GeoResources get geoResources =>
+      GeoResources(Directory(p.join(store.root.path, 'geo')));
   Profile profile = Profile.initial();
   ConfigurationLibrary library = ConfigurationLibrary();
   int mixedPort = 17890;
@@ -260,6 +265,7 @@ class ClientController extends ChangeNotifier {
     final parsed =
         manualProfile ??
         const ConfigurationImporter().parse(original, name: name);
+    await geoResources.ensureFor(parsed);
     final selected = parsed.nodes.firstOrNull?.id ?? directTarget;
     compiler.compile(parsed, mixedPort: mixedPort, selectedNodeId: selected);
     final entry = ConfigurationSource(
@@ -317,6 +323,7 @@ class ClientController extends ChangeNotifier {
       importer.parse(original, name: old.name),
       old,
     );
+    await geoResources.ensureFor(parsed);
     compiler.compile(
       parsed,
       mixedPort: mixedPort,

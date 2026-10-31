@@ -139,7 +139,7 @@ void main() {
       (d) => d['proxy-groups'][1]['disable-udp'] = true,
       (d) => d['proxy-groups'][1]['type'] = 'load-balance',
       (d) => d['rules'] = ['MATCH,Main', 'DOMAIN,a.test,A'],
-      (d) => d['rules'] = ['GEOIP,CN,DIRECT', 'MATCH,Main'],
+      (d) => d['rules'] = ['RULE-SET,ads,DIRECT', 'MATCH,Main'],
       (d) => d['rules'] = ['IP-CIDR6,127.0.0.1/32,DIRECT', 'MATCH,Main'],
       (d) => d['rules'] = ['DOMAIN,a.test,DIRECT,no-resolve', 'MATCH,Main'],
       (d) => d['rules'] = ['DOMAIN,a.test,A'],

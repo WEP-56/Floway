@@ -111,3 +111,13 @@ python tools/verify_research.py --docs-only
 5. `./tools/build_windows.ps1` 正式入口 Release 成功；Release `verify_host.py` 12 项转发/生命周期检查通过。本轮没有修改系统代理/路由/Windows DNS，没有 Android 构建，也未重新下载用户真实订阅。
 
 本轮早先尝试从 host workspace 直接测试依赖 crate，Cargo 因其非 workspace member 拒绝；随后改用该 crate 所在 vendor workspace 的 manifest 完成测试。两份真实订阅仍有未支持的 Geo/Fake-IP/respect-rules/高级传输等字段，不能据此宣称完整导入成功。
+
+## Windows Geo 规则与资源增量（2026-10-31）
+
+在不引入内核自动更新的前提下，接通 Clash `GEOIP` / `GEOSITE` 规则与本地 Geo 资源；两条真实订阅之前卡在这一步。
+
+1. `flutter analyze` 无问题。
+2. `flutter test test/geo_rules_test.dart test/configuration_importer_test.dart test/policy_groups_test.dart` 通过，其中新增 4 项（GEOIP 大写归一与编译、非法类别拒绝、资源下载/摘要记录、超小下载拒绝）。
+3. Rust 宿主 `cargo test --locked --manifest-path native/core-host/Cargo.toml --lib` 13 项通过，新增 `geo_rules_need_local_databases` 验证缺 geoip.dat / geosite.dat 时直接拒绝而不是静默跳过。
+
+**本轮未执行**：完整 `flutter test`、`flutter build windows`、真实 geo dat 的端到端转发，以及任何 TUN 验证。设备侧 shell 会随单次调用结束回收后台进程，长任务无法跨调用继续，本轮只完成了可单次运行的验证。

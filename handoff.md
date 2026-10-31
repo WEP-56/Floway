@@ -294,3 +294,15 @@ Windows only / 无迁移 / 固定内核且无自动更新继续生效。已扩�
 - 当前环境 `python` 指向 WindowsApps 别名，脚本用 `py`：`py tools/verify_host.py --host native/core-host/target/release/flvp-core-host.exe`、`py tools/verify_research.py --docs-only`。
 - DNS 回归：`flutter test test/dns_options_test.dart test/dns_runtime_test.dart`；Release 运行测试可在该测试进程设置 `FLVP_TEST_HOST` 为 Release host 的绝对路径。DNS crate 单测用 `cargo test --locked --manifest-path native/vendor/vp-dns/Cargo.toml --lib --target-dir native/core-host/target`；不能从 host workspace 直接 `-p vp-dns` 测其 dev-dependencies。
 - 共享 typed schema、宿主或 vendor 改动后同步更新双层校验与测试，并重新构建 Windows；不运行 Android 构建。测试配置/公开 DNS 查询均不能替代真实订阅的完整导入与公网转发验收。
+
+## 17. 增量：GEOIP / GEOSITE 规则与本地 Geo 资源（2026-10-31）
+
+上一段留下的“规则类型尚未支持”是导入硬阻塞：只要订阅里有一条 GEOIP/GEOSITE，整份导入直接失败。本轮把它接通，同时保持“过滤字段/静默跳过”禁令：
+
+1. `lib/core/profile.dart` 新增 `RuleKind.geoIp` / `geoSite`、`GEOIP`/`GEOSITE` 核心类型与类别格式校验；`no-resolve` 同时允许用于 IP 与 GEOIP 规则。
+2. `lib/core/configuration_importer.dart` 接受这两种规则，GEOIP 类别统一转大写；`RULE-SET`/`PROCESS-NAME` 等仍显式拒绝。
+3. 新增 `lib/core/geo_resources.dart`：下载 `geoip.dat` / `geosite.dat`（默认 Loyalsoldier v2ray-rules-dat 发布包），4 KiB–6 MiB×16 尺寸边界、临时文件原子替换、`meta.json` 记录尺寸/猚256/来源/时间。文件落在 `%APPDATA%\io.flvpcore\flvpcore\geo`，改动 `compiler`/快照事务。
+4. `ClientController.importConfiguration` 与 `refreshConfiguration` 在编译前 `ensureFor(profile)`；缺资源且下载失败时导入失败并报错，不写一份假成功。
+5. Rust：新增 `native/core-host/src/geo.rs`，只从本地目录读（`FLVP_GEO_DIR` 或 `FLVP_APP_SUPPORT_DIR/geo`），不跟 URL 自行更新；`config.rs` 把 GEOIP/GEOSITE 加入白名单，预检类别存在性（缺库/缺类别直接报错），并把真实数据库传入 `vp_rule::CompileEnv`（之前是 `&None`，内核会静默跳过）。
+
+已知缺口：`RULE-SET` / `rule-providers`、`lazy:true` 与 `load-balance`、DNS `fake-ip`/`respect-rules`/`nameserver-policy`、非 chrome 指纹、Hysteria2 `ports`/`mport`、TUN 全部未动。本轮未验证：完整 `flutter test`、`flutter build windows`、真实 dat 端到端。设备 shell 在单次调用结束时回收后台进程，长于 ~2 分钟的构建无法跨调用继续。

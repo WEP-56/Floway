@@ -273,8 +273,10 @@ class ConfigurationImporter {
           'IP-CIDR' || 'IP-CIDR6' => RuleKind.ipCidr,
           'NETWORK' => RuleKind.network,
           'DST-PORT' => RuleKind.destinationPort,
+          'GEOIP' => RuleKind.geoIp,
+          'GEOSITE' => RuleKind.geoSite,
           _ => throw const ConfigurationException(
-            '规则类型尚未支持；GEOIP/GEOSITE/RULE-SET 需要完整资源支持',
+            '规则类型尚未支持；RULE-SET、PROCESS-NAME 与逻辑规则尚未接入',
           ),
         };
         if (fields.first == 'IP-CIDR6') {
@@ -288,7 +290,9 @@ class ConfigurationImporter {
           RuleSpec(
             id: const Uuid().v4(),
             kind: kind,
-            value: fields[1],
+            value: fields.first == 'GEOIP'
+                ? fields[1].toUpperCase()
+                : fields[1],
             targetId: resolve(fields[2]),
             noResolve: fields.length == 4,
           ),
