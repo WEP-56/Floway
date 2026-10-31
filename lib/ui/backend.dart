@@ -1,4 +1,5 @@
 import 'package:floway/enum/enum.dart';
+import 'package:floway/models/models.dart';
 import 'package:floway/providers/providers.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -18,6 +19,40 @@ FlvpProxyMode _toFlvpMode(Mode mode) => switch (mode) {
   Mode.direct => FlvpProxyMode.direct,
 };
 
+const double _bytesPerGb = 1024 * 1024 * 1024.0;
+
+String _two(int value) => value.toString().padLeft(2, '0');
+
+String _dateText(DateTime? value) => value == null
+    ? '—'
+    : '${value.year}-${_two(value.month)}-${_two(value.day)}';
+
+String _stampText(DateTime? value) => value == null
+    ? '—'
+    : '${_two(value.month)}-${_two(value.day)} ${_two(value.hour)}:${_two(value.minute)}';
+
+/// 上游配置到界面的映射：用量、到期与更新时间取上游已有的订阅信息，
+/// 没有时保持界面已有的缺省呈现。
+SubInfo _toSubInfo(Profile profile, int? currentProfileId) {
+  final info = profile.subscriptionInfo;
+  return SubInfo(
+    id: profile.id.toString(),
+    name: profile.label.isEmpty ? '未命名配置' : profile.label,
+    url: profile.url,
+    used: info == null ? 0 : (info.upload + info.download) / _bytesPerGb,
+    total: info == null ? 0 : info.total / _bytesPerGb,
+    expire: _dateText(info?.expireDate),
+    updated: _stampText(profile.lastUpdateDate),
+    active: profile.id == currentProfileId,
+    remote: profile.type == ProfileType.url,
+    hasQuota: info != null,
+  );
+}
+
+List<SubInfo> _toSubInfos(List<Profile> profiles, int? currentProfileId) => [
+  for (final profile in profiles) _toSubInfo(profile, currentProfileId),
+];
+
 /// 把 Floway 壳接到上游状态与动作上：上游是唯一真相，变化后由
 /// [ref.listenManual] 回推给设计 store，避免界面状态与内核实态分叉。
 class FlvpBackendBinder extends ConsumerStatefulWidget {
@@ -36,6 +71,15 @@ class FlvpBackendBinder extends ConsumerStatefulWidget {
 
 class _FlvpBackendBinderState extends ConsumerState<FlvpBackendBinder> {
   late final _RiverpodBackend _backend = _RiverpodBackend(ref);
+
+  void _pushProfiles() {
+    widget.store.syncProfiles(
+      _toSubInfos(
+        ref.read(profilesProvider),
+        ref.read(currentProfileIdProvider),
+      ),
+    );
+  }
 
   @override
   void initState() {
@@ -57,6 +101,8 @@ class _FlvpBackendBinderState extends ConsumerState<FlvpBackendBinder> {
       patchClashConfigProvider.select((state) => state.mode),
       (_, next) => widget.store.syncShortcuts(mode: _toFlvpMode(next)),
     );
+    ref.listenManual(profilesProvider, (_, _) => _pushProfiles());
+    ref.listenManual(currentProfileIdProvider, (_, _) => _pushProfiles());
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       final config = ref.read(patchClashConfigProvider);
@@ -67,6 +113,7 @@ class _FlvpBackendBinderState extends ConsumerState<FlvpBackendBinder> {
         tunMode: config.tun.enable,
         mode: _toFlvpMode(config.mode),
       );
+      _pushProfiles();
     });
   }
 
@@ -110,5 +157,13 @@ class _RiverpodBackend implements FlvpBackend {
   Future<void> setMode(FlvpProxyMode value) async {
     if (_ref.read(patchClashConfigProvider).mode == _toMode(value)) return;
     _ref.read(setupActionProvider.notifier).changeMode(_toMode(value));
+  }
+
+  @override
+  Future<void> setCurrentProfile(String id) async {
+    final profileId = int.tryParse(id);
+    if (profileId == null) return;
+    if (_ref.read(currentProfileIdProvider) == profileId) return;
+    _ref.read(currentProfileIdProvider.notifier).value = profileId;
   }
 }

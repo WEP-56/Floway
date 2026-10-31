@@ -356,3 +356,7 @@ Windows 侧边栏与 Android 底栏统一为五个主入口：**仪表盘 / 代�
 - TUN：`patchClashConfigProvider.tun.enable`。
 
 仍未接（下一批）：流量曲线与连接数（DASH 其余项）、节点与策略组（PROXY）、订阅与配置（PROFILE）、信息页记录、设置持久化回写（SET）；这些位置仍显示设计稿演示数据。
+### 配置列表接线（2026-10-31 追加）
+
+- 配置页列表改为显示上游真实配置：`profilesProvider` 与 `currentProfileIdProvider` 经桥接镜像到界面（名称、类型、用量/总量、到期、更新时间取自上游订阅信息，没有时保持界面缺省呈现）；点击切换当前配置写 `currentProfileIdProvider`，由上游 `core_manager` 监听后应用。
+- 仍未接（后续项）：添加配置（文件/链接/二维码/分享链接）、删除、手动更新与自动更新、编辑与完整自定义工作区（PROFILE-02～16）；代理页（PROXY-01～10）未开始。

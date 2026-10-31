@@ -46,6 +46,8 @@ abstract class FlvpBackend {
   Future<void> setTunMode(bool value);
 
   Future<void> setMode(FlvpProxyMode value);
+
+  Future<void> setCurrentProfile(String id);
 }
 
 class FlvpDesignStore extends ChangeNotifier {
@@ -168,6 +170,12 @@ class FlvpDesignStore extends ChangeNotifier {
   /* ---------- backend bridge ---------- */
 
   /// 后端的权威运行状态回推；不再反向调用后端。
+  /// 后端的真实配置列表回推；当前配置由 active 标记。
+  void syncProfiles(List<SubInfo> value) {
+    subs = List.of(value);
+    notifyListeners();
+  }
+
   void syncRunning(bool value) {
     if (running == value) return;
     running = value;
@@ -231,6 +239,11 @@ class FlvpDesignStore extends ChangeNotifier {
   }
 
   void activateSub(String id) {
+    final backend = this.backend;
+    if (backend != null) {
+      unawaited(backend.setCurrentProfile(id));
+      return;
+    }
     subs = [for (final sub in subs) sub.copyWith(active: sub.id == id)];
     final target = subs.where((sub) => sub.id == id).firstOrNull;
     notify('已切换到「${target?.name ?? '订阅'}」');
