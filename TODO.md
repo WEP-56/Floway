@@ -366,3 +366,9 @@ Windows 侧边栏与 Android 底栏统一为五个主入口：**仪表盘 / 代�
 - 已按上游锁定版本纳入 Clash.Meta 子模块（url、branch 按上游 .gitmodules，提交 c5062921，即 FlClash v0.9.2 对应的核心提交）。
 - Windows 构建已验证通过：flutter build windows --debug 耗时 360.1s，产出 build\windows\x64\runner\Debug\Floway.exe，同目录含 FlClashCore.exe 与 FlClashHelperService.exe。
 - 仍未验证：Android 构建、实际启动与运行时行为（由用户本地执行）。
+### 启动弹窗与配置页动作（2026-10-31 追加）
+
+- 移除启动时的免责声明弹窗及其启动门禁：lib/bootstrap.dart 删除 views/disclaimer.dart 的导入、_handlerDisclaimer 调用与相关成员；免责声明正文页面保留为工具/关于页的手动入口。
+- 配置页动作接入上游：添加（importSub 转 addProfileFromLink）、删除（removeSub 转 deleteProfile）、全部更新（refreshAllSubs 转 autoUpdateProfiles）。
+- 静态分析：flutter analyze --no-pub lib 无问题。
+- 本批次余下：代理页策略组与节点（PROXY-01～10）、配置页编辑与自定义工作区（PROFILE-13～16）。
