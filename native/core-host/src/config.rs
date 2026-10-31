@@ -12,6 +12,8 @@ pub struct PreparedConfig {
     pub port: u16,
     pub tun_enabled: bool,
     pub tun_auto_route: bool,
+    pub tun_address: String,
+    pub tun_netmask: String,
     pub warnings: Vec<String>,
 }
 
@@ -32,6 +34,8 @@ pub struct Validated {
     pub port: u16,
     pub tun_enabled: bool,
     pub tun_auto_route: bool,
+    pub tun_address: String,
+    pub tun_netmask: String,
     pub warnings: Vec<String>,
 }
 
@@ -66,6 +70,8 @@ impl PreparedConfig {
             port: validated.port,
             tun_enabled: validated.tun_enabled,
             tun_auto_route: validated.tun_auto_route,
+            tun_address: validated.tun_address,
+            tun_netmask: validated.tun_netmask,
             warnings: validated.warnings,
         })
     }
@@ -113,7 +119,7 @@ struct Tun {
 impl Tun {
     /// 校验 TUN 字段：内核支持的透传，常见但当前无实现的字段降级并提示，
     /// 未知字段显式报错而不是静默丢弃。
-    fn plan(&self) -> Result<(bool, bool, Vec<String>), String> {
+    fn plan(&self) -> Result<(bool, bool, String, String, Vec<String>), String> {
         let mut warnings = Vec::new();
         for key in self.extra.keys() {
             match key.as_str() {
@@ -155,7 +161,16 @@ impl Tun {
         {
             return Err("tun.fake-ip-range 必须是 CIDR".into());
         }
-        Ok((self.enable, self.auto_route, warnings))
+        if self.auto_redirect == Some(true) {
+            warnings.push("tun.auto-redirect 暂未接入，已忽略".into());
+        }
+        Ok((
+            self.enable,
+            self.auto_route,
+            self.address.clone().unwrap_or_else(|| "198.18.0.1".into()),
+            self.netmask.clone().unwrap_or_else(|| "255.255.0.0".into()),
+            warnings,
+        ))
     }
 }
 
@@ -326,7 +341,7 @@ pub fn validate(text: &str) -> Result<Validated, String> {
         return Err("Only loopback ordinary proxy mode is available in this build".into());
     }
     cfg.dns.validate()?;
-    let (tun_enabled, tun_auto_route, mut warnings) = cfg.tun.plan()?;
+    let (tun_enabled, tun_auto_route, tun_address, tun_netmask, warnings) = cfg.tun.plan()?;
     if cfg.proxies.len() > 1024 || cfg.rules.len() > 8192 {
         return Err("Configuration exceeds this milestone's resource limits".into());
     }
@@ -444,6 +459,8 @@ pub fn validate(text: &str) -> Result<Validated, String> {
         port: cfg.mixed_port,
         tun_enabled,
         tun_auto_route,
+        tun_address,
+        tun_netmask,
         warnings,
     })
 }

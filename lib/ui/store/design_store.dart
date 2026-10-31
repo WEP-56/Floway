@@ -266,6 +266,11 @@ class FlvpDesignStore extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// 仅 Windows 宿主实现了管理员协助进程的卸载。
+  Future<void> uninstallTunHelper() async {
+    notify('当前环境不支持卸载管理员协助进程');
+  }
+
   void toggleTheme() {
     setSettings(
       (current) => current.copyWith(

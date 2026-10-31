@@ -26,6 +26,8 @@ class CoreStatus {
     this.selected,
     this.systemProxy = false,
     this.systemProxyRecoveryError,
+    this.tunEnabled = false,
+    this.tunRecovery,
   });
   final CoreState state;
   final int generation;
@@ -38,6 +40,8 @@ class CoreStatus {
   final String? selected;
   final bool systemProxy;
   final String? systemProxyRecoveryError;
+  final bool tunEnabled;
+  final String? tunRecovery;
   bool get running => state == CoreState.running;
 
   factory CoreStatus.fromJson(Map<String, dynamic> json) => CoreStatus(
@@ -52,6 +56,8 @@ class CoreStatus {
     selected: json['selected'] as String?,
     systemProxy: json['systemProxy'] as bool? ?? false,
     systemProxyRecoveryError: json['systemProxyRecoveryError'] as String?,
+    tunEnabled: json['tunEnabled'] as bool? ?? false,
+    tunRecovery: json['tunRecovery'] as String?,
   );
 }
 

@@ -72,6 +72,7 @@ class FlvpClientStore extends FlvpDesignStore {
   String? _shownError;
   Object? _lastStatus;
   String? _shownNetworkRecoveryError;
+  String? _shownTunRecovery;
 
   Future<void> initializeClient() async {
     await controller.initialize();
@@ -137,8 +138,25 @@ class FlvpClientStore extends FlvpDesignStore {
         mixedPort: '${controller.mixedPort}',
         socksPort: '${controller.mixedPort}',
         systemProxy: controller.status.systemProxy,
+        tunMode: controller.profile.tun.enabled,
       ),
     );
+  }
+
+  @override
+  Future<void> uninstallTunHelper() async {
+    if (_disposed || _closing) return;
+    await _enqueue(() async {
+      try {
+        await controller.uninstallTunHelper();
+        if (!_disposed) {
+          super.setSettings((s) => s.copyWith(tunMode: controller.tunEnabled));
+          notify('已卸载管理员协助进程');
+        }
+      } catch (error) {
+        if (!_disposed) notify('卸载失败：$error');
+      }
+    });
   }
 
   void _onController() {
@@ -160,6 +178,10 @@ class FlvpClientStore extends FlvpDesignStore {
     if (controller.error != null && controller.error != _shownError) {
       _shownError = controller.error;
       notify(controller.error!);
+    } else if (controller.status.tunRecovery != null &&
+        controller.status.tunRecovery != _shownTunRecovery) {
+      _shownTunRecovery = controller.status.tunRecovery;
+      notify(controller.status.tunRecovery!);
     } else if (controller.status.systemProxyRecoveryError != null &&
         controller.status.systemProxyRecoveryError !=
             _shownNetworkRecoveryError) {

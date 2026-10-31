@@ -337,3 +337,11 @@ Windows only / 无迁移 / 固定内核且无自动更新继续生效。已扩�
 - lib.rs：capabilities 暴露 tun/elevated/tunHelperPort/tunInstallable；status 携带 tunEnabled/tunAutoRoute/configWarnings；TUN 与系统代理互斥。
 - Dart：tun_options.dart（Profile.tun）、configuration_importer 解析、compiler 输出、elevated_host.dart（计划任务安装 + ElevatedHostTransport）、CoreBridge.switchTransport、ClientController.setTun 与启动恢复；设置页 TUN 开关接到真实流程。
 - 待办：Wintun 安装器/卸载、宿主级路由与 DNS 事务快照、UI 卸载协助进程、安卓 VpnService。
+
+## 21. TUN 事务与恢复（2026-10-31 补）
+
+- `native/core-host/src/tun_state.rs`：state/tun.json 事务日志，record/clear/recover，Windows 下 route delete 只删本进程持有条目；启动自愈并把结果放进 status.tunRecovery。
+- PreparedConfig/Validated 增加 tun_address/tun_netmask（默认 198.18.0.1 / 255.255.0.0），供事务日志与清理使用。
+- 宿主在 start/apply 成功与失败回滚、stop 各分支同步事务日志，避免“记录与实际运行不一致”。
+- Dart：CoreStatus 增加 tunEnabled/tunRecovery，设置页展示恢复提示并新增卸载协助进程按钮；FlvpDesignStore 提供默认拒绝实现。
+- 未做：卸载协助进程后的计划任务清理需提权（已用 RunAs 弹窗）；TUN 下的真实 wintun 转发依赖用户机器实测。

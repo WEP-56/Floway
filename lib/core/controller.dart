@@ -237,6 +237,28 @@ class ClientController extends ChangeNotifier {
     if (error != null) throw StateError(error!);
   }
 
+  /// 卸载管理员协助进程并回到普通宿主；TUN 会同时关闭。\r
+  Future<void> uninstallTunHelper() async {
+    await _execute(() async {
+      final next = profile.copyWith(tun: const TunOptions.disabled());
+      profile = next;
+      await store.saveClientState(
+        next,
+        mixedPort,
+        selectedNodeId ?? directTarget,
+        library: library,
+      );
+      if (bridge.transport is ElevatedHostTransport) {
+        await bridge.switchTransport(
+          WindowsHostTransport(supportDirectory: store.root.path),
+        );
+        await bridge.initialize();
+      }
+      await HelperClient.uninstall();
+    });
+    if (error != null) throw StateError(error!);
+  }
+
   Future<void> setSystemProxy(bool enabled) async {
     if (enabled && profile.tun.enabled) {
       throw StateError('TUN 与系统代理互斥，请先关闭 TUN');

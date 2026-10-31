@@ -487,10 +487,21 @@ class _SettingsPanel extends StatelessWidget {
                 ),
                 FlvpTileToggle(
                   title: 'TUN 模式',
-                  summary: pc ? '虚拟网卡接管全部流量，需要管理员权限' : '通过 VPN 接口接管全部流量',
+                  summary: pc
+                      ? '虚拟网卡接管全部流量；首次开启需在系统弹窗授权一次'
+                      : '通过 VPN 接口接管全部流量',
                   value: s.tunMode,
                   onChanged: (v) => store.setSettings((c) => c.copyWith(tunMode: v)),
                 ),
+                if (pc)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: FlvpButton(
+                      expand: true,
+                      label: '卸载管理员协助进程',
+                      onPressed: () => store.uninstallTunHelper(),
+                    ),
+                  ),
               ],
             ),
           ],

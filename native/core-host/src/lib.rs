@@ -8,6 +8,7 @@ mod geo;
 mod node_options;
 mod providers;
 mod system_proxy;
+mod tun_state;
 
 use std::ffi::{CStr, CString, c_char};
 use std::io::{Read, Write};
@@ -116,6 +117,7 @@ pub struct Host {
     network_recovered: bool,
     network_recovery_error: Option<String>,
     network_lock: Option<std::fs::File>,
+    tun_recovery: Option<String>,
 }
 
 impl Host {
@@ -292,6 +294,12 @@ impl Host {
                 {
                     system_proxy::restore(root).map_err(|e| ("SYSTEM_PROXY_CONFLICT", e, None))?;
                 }
+                let tun_target = config
+                    .tun_enabled
+                    .then(|| (config.tun_address.clone(), config.tun_netmask.clone()));
+                if let (Some(root), Some((address, netmask))) = (&root, &tun_target) {
+                    let _ = tun_state::record(root, address, netmask);
+                }
                 let start = |config| -> Result<Running, String> {
                     let running = Running::start(config)?;
                     if reenable
@@ -313,6 +321,11 @@ impl Host {
                     Ok(running) => {
                         self.running = Some(running);
                         self.failed = false;
+                        if tun_target.is_none()
+                            && let Some(root) = &root
+                        {
+                            tun_state::clear(root);
+                        }
                         Ok(self.status())
                     }
                     Err(error) => {
@@ -320,8 +333,20 @@ impl Host {
                             self.generation += 1;
                             match start(previous) {
                                 Ok(restored) => {
+                                    let restart_tun = (
+                                        restored.config.tun_enabled,
+                                        restored.config.tun_address.clone(),
+                                        restored.config.tun_netmask.clone(),
+                                    );
                                     self.running = Some(restored);
                                     self.failed = false;
+                                    if let Some(root) = &root {
+                                        if restart_tun.0 {
+                                            let _ = tun_state::record(root, &restart_tun.1, &restart_tun.2);
+                                        } else {
+                                            tun_state::clear(root);
+                                        }
+                                    }
                                     Err(("APPLY_FAILED", error, Some("restored")))
                                 }
                                 Err(_) => {
@@ -331,6 +356,10 @@ impl Host {
                             }
                         } else {
                             self.failed = true;
+                            if let (Some(root), Some((address, netmask))) = (&root, &tun_target) {
+                                tun_state::cleanup_routes(address, netmask);
+                                tun_state::clear(root);
+                            }
                             Err(("CORE_START_FAILED", error, None))
                         }
                     }
@@ -374,6 +403,7 @@ impl Host {
                 "selected": selected, "systemProxy": system_proxy,
                 "tunEnabled": running.config.tun_enabled, "tunAutoRoute": running.config.tun_auto_route,
                 "configWarnings": running.config.warnings,
+                "tunRecovery": self.tun_recovery,
                 "systemProxyRecoveryError": self.network_recovery_error})
         } else {
             json!({"state": if self.failed {"failed"} else {"stopped"},
@@ -382,6 +412,7 @@ impl Host {
                 "upload": 0, "download": 0, "connections": 0, "selected": null,
                 "systemProxy": system_proxy, "tunEnabled": false, "tunAutoRoute": false,
                 "configWarnings": Vec::<String>::new(),
+                "tunRecovery": self.tun_recovery,
                 "systemProxyRecoveryError": self.network_recovery_error})
         }
     }
@@ -394,7 +425,18 @@ impl Host {
             self.network_recovery_error = Some(error);
         }
         if let Some(running) = self.running.take() {
+            let tun = (
+                running.config.tun_enabled,
+                running.config.tun_address.clone(),
+                running.config.tun_netmask.clone(),
+            );
             running.stop();
+            if tun.0
+                && let Some(root) = app_support_root()
+            {
+                tun_state::cleanup_routes(&tun.1, &tun.2);
+                tun_state::clear(&root);
+            }
         }
         self.failed = false;
     }
@@ -404,6 +446,9 @@ impl Host {
             return;
         }
         self.network_recovered = true;
+        if let Some(root) = app_support_root() {
+            self.tun_recovery = tun_state::recover(&root);
+        }
         if let Some(root) = app_support_root() {
             let lock = (|| -> std::io::Result<std::fs::File> {
                 std::fs::create_dir_all(root.join("state"))?;

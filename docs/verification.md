@@ -153,3 +153,13 @@ python tools/verify_research.py --docs-only
 - Dart：新增 `TunOptions`（tun_options.dart，随 Profile 序列化）、导入器按字段降级、编译器输出真实 tun 段；`elevated_host.dart` 提供计划任务安装/卸载、令牌读取、`ElevatedHostTransport`（回环 TCP + hello 鉴权）；`ClientController.setTun` 负责切换宿主、重建快照，启动时若上次 TUN 开启会自动重连协助进程，连不上则回退普通代理并提示。
 - 校验：`cargo test --lib` 13 项通过（含 tun 白名单、未知字段报错、`TUN_REQUIRES_ADMIN`）；`flutter analyze` 无问题；`flutter test` 80 项通过（新增 test/tun_options_test.dart 4 项）。
 - 未完成：Wintun 组件安装与真实流量转发需在用户机器实测；TUN 下的路由/DNS 事务恢复依赖内核 vp-tun 的 auto_route，本轮未额外做宿主级快照；卸载协助进程入口（HelperClient.uninstall）尚未接到 UI。
+
+### TUN 路由事务与崩溃恢复（2026-10-31 补）
+
+- 新增 `native/core-host/src/tun_state.rs`：进入 TUN 前写 `state/tun.json`（address/netmask/pid/started_at），正常停止清掉；启动时发现残留记录即按记录清理路由并回报 `tunRecovery`，同时删除记录（BOM 容错）。
+- 现场验证：预置 PID 999999 的 `state/tun.json` 后启动宿主，status 返回 `tunRecovery: "已清理上次异常退出（PID 999999）残留的 TUN 路由"`，state 文件被删除。
+- 现场验证：非提权宿主收到含 `tun.enable` 的 start 快照返回 `TUN_REQUIRES_ADMIN`（ok=false，state=stopped，无回滚）。
+- Wintun：内核 `vp-tun::wintun_installer::ensure_wintun_dll` 已按 WINTUN_DLL_PATH→exe 同级→cwd→LOCALAPPDATA→TEMP→System32 探测，缺文件时给出下载指引，无需宿主额外安装；`auto_route` 启用前会预清理孤儿路由并在 Drop 时恢复。
+- DNS：内核只在 TUN 内劫持报文，不改写系统 DNS，因此事务日志只覆盖路由（不伪造未做的 DNS 回滚）。
+- UI：设置页 TUN 开关已接真实流程，并新增「卸载管理员协助进程」按钮（`HelperClient.uninstall`），需要重新授权时点它即可。
+- 校验：cargo clippy -D warnings 通过；cargo test --lib 15 项通过；flutter analyze 无问题；flutter test 80 项通过。
