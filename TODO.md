@@ -344,4 +344,5 @@ Windows 侧边栏与 Android 底栏统一为五个主入口：**仪表盘 / 代�
 - §4~§9 的逐页接线：所有页面仍读 `FlvpDesignStore` 预览数据，尚未调用上游 provider；`FlvpDesignStore` 的真实数据源替换（BASE-04）随之未完成。
 - §8 信息页的列表内容、搜索、详情与标签专属动作未接上游数据。
 - Android `applicationId` 仍为上游 `com.follow.clash`；Android 的 TUN / 前台服务等需本地实测确认。
-- 本机未安装 Go 工具链，未产出 mihomo 核心二进制；Windows / Android 构建与运行实测由本地完成。
+- 本机未安装 Go 工具链，未产出 mihomo 核心二进制；Windows / Android 构建与运行实测由本地完成。- 上游核心源码 `core/Clash.Meta` 未纳入仓库（上游以 `.gitmodules` 声明为子模块，参考检出未含 gitlink，无法确定上游锁定的提交）；协议核心构建前需按该声明获取源码，且本机无 Go 工具链。
+- Windows 安装/便携产物的名称链已同步为 Floway（可执行名、显示名、安装器进程名与发行包名）；安装器里的上游出处链接与站点脚本仍指向上游，待打包批次处理。
