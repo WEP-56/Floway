@@ -360,3 +360,9 @@ Windows 侧边栏与 Android 底栏统一为五个主入口：**仪表盘 / 代�
 
 - 配置页列表改为显示上游真实配置：`profilesProvider` 与 `currentProfileIdProvider` 经桥接镜像到界面（名称、类型、用量/总量、到期、更新时间取自上游订阅信息，没有时保持界面缺省呈现）；点击切换当前配置写 `currentProfileIdProvider`，由上游 `core_manager` 监听后应用。
 - 仍未接（后续项）：添加配置（文件/链接/二维码/分享链接）、删除、手动更新与自动更新、编辑与完整自定义工作区（PROFILE-02～16）；代理页（PROXY-01～10）未开始。
+### 构建可用性（2026-10-31）
+
+- 已修行内报告的应用目标名问题：应用改名后 build\windows\x64\CMakeCache.txt 里缓存的 CMAKE_INSTALL_PREFIX （生成表达式 $<TARGET_FILE_DIR:旧目标名>）失效，配置报 No target。清理陈旉构建目录后，CMake 配置与生成正常。
+- 已按上游锁定版本纳入 Clash.Meta 子模块（url、branch 按上游 .gitmodules，提交 c5062921，即 FlClash v0.9.2 对应的核心提交）。
+- Windows 构建已验证通过：flutter build windows --debug 耗时 360.1s，产出 build\windows\x64\runner\Debug\Floway.exe，同目录含 FlClashCore.exe 与 FlClashHelperService.exe。
+- 仍未验证：Android 构建、实际启动与运行时行为（由用户本地执行）。
