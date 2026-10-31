@@ -305,4 +305,4 @@ Windows only / 无迁移 / 固定内核且无自动更新继续生效。已扩�
 4. `ClientController.importConfiguration` 与 `refreshConfiguration` 在编译前 `ensureFor(profile)`；缺资源且下载失败时导入失败并报错，不写一份假成功。
 5. Rust：新增 `native/core-host/src/geo.rs`，只从本地目录读（`FLVP_GEO_DIR` 或 `FLVP_APP_SUPPORT_DIR/geo`），不跟 URL 自行更新；`config.rs` 把 GEOIP/GEOSITE 加入白名单，预检类别存在性（缺库/缺类别直接报错），并把真实数据库传入 `vp_rule::CompileEnv`（之前是 `&None`，内核会静默跳过）。
 
-已知缺口：`RULE-SET` / `rule-providers`、`lazy:true` 与 `load-balance`、DNS `fake-ip`/`respect-rules`/`nameserver-policy`、非 chrome 指纹、Hysteria2 `ports`/`mport`、TUN 全部未动。本轮未验证：完整 `flutter test`、`flutter build windows`、真实 dat 端到端。设备 shell 在单次调用结束时回收后台进程，长于 ~2 分钟的构建无法跨调用继续。
+已知缺口：`RULE-SET` / `rule-providers`、`lazy:true` 与 `load-balance`、DNS `fake-ip`/`respect-rules`/`nameserver-policy`、非 chrome 指纹、Hysteria2 `ports`/`mport`、TUN 全部未动。真实数据验证：Debug 宿主加载真实 geoip.dat / geosite.dat 后，含 GEOIP,CN + GEOSITE,category-ads-all 的配置启动成功；未知类别 GEOIP,ZZ、GEOSITE,__no_such_category__ 均返回 CONFIG_REJECTED。完整 flutter test 61 项通过（6 项 runtime 测试需 Debug 宿主，未启用）。flutter build windows 本轮未完成：设备 shell 的 PATH 无 cmake，VS 装在 D:\building，需 Developer Prompt。

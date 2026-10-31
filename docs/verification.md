@@ -120,4 +120,6 @@ python tools/verify_research.py --docs-only
 2. `flutter test test/geo_rules_test.dart test/configuration_importer_test.dart test/policy_groups_test.dart` 通过，其中新增 4 项（GEOIP 大写归一与编译、非法类别拒绝、资源下载/摘要记录、超小下载拒绝）。
 3. Rust 宿主 `cargo test --locked --manifest-path native/core-host/Cargo.toml --lib` 13 项通过，新增 `geo_rules_need_local_databases` 验证缺 geoip.dat / geosite.dat 时直接拒绝而不是静默跳过。
 
-**本轮未执行**：完整 `flutter test`、`flutter build windows`、真实 geo dat 的端到端转发，以及任何 TUN 验证。设备侧 shell 会随单次调用结束回收后台进程，长任务无法跨调用继续，本轮只完成了可单次运行的验证。
+**真实验证补充**：Debug 宿主加载真实 geoip.dat / geosite.dat（Loyalsoldier 发布包）后，含 GEOIP,CN 与 GEOSITE,category-ads-all 的配置启动成功；GEOSITE,__no_such_category__ 与 GEOIP,ZZ 均返回 CONFIG_REJECTED。完整 flutter test 本地 61 项通过（6 项需 Debug 宿主的 runtime 测试本轮未启用）。
+
+**本轮未执行**：flutter build windows（设备 shell 的 PATH 无 cmake，Visual Studio 装在 D:\building，需 Developer Prompt）、Release 产物验收与任何 TUN 验证。
