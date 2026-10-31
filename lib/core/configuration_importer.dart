@@ -58,7 +58,7 @@ class ConfigurationImporter {
                 'rule-providers',
               }.contains(k),
             ),
-        '配置包含尚未支持的顶层字段；TUN、provider、Geo 资源及其他内核选项尚未开放',
+        '配置包含尚未支持的顶层字段；TUN、proxy-providers、sub-rules 及其他内核选项尚未开放',
       );
       final proxies = (yaml as Map)['proxies'];
       requireConfig(
