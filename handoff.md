@@ -1,8 +1,46 @@
 # FLVPcore 开发交接
 
-更新：2026-10-30。工作区：`D:\FLVPcore`。本文供新会话直接接续，区分已实现能力、用户已确定的产品方向与待验证的实现方案。
+更新：2026-10-31 12:25。工作区：`D:\FLVPcore`（只同步）；开发克隆 `C:\Users\14844\flvpcore-work`。用户方向始终为 **Windows 优先、不做旧数据迁移、不自动更新内核、保留现有 UI、优先订阅兼容**。
 
-**最新接续入口：先读第 14–16 节，尤其第 16 节的收工状态和明日任务。** 前半部分保留早期调研/设计历史，不代表当前待办；vpn-parser 调研、Windows 系统代理、配置仓库、协议/策略组、分享链接及普通代理 DNS 子集都已有实现。用户最新方向仍为 **Windows 优先、暂停 Android、不做旧数据迁移、不自动更新内核、保留现有 UI，优先订阅兼容**。
+## 0. 当前状态总览（以此节为准）
+
+代码基线：`master` 7fa50c7（宿主契版握手 + 顶层字段降级），前序 4c36558 / 8d3e0d3（TUN 事务与清理）、f779197（TUN 一期）。内置内核固定 vp_core rev `fa3e7430371930c440ffb1bdccc6869c63554a34`。
+
+已完成能力：
+
+- 订阅导入（YAML/JSON/分享链接）与字段级降级契约：未知顶层字段、未知节点参数、未知策略组字段、DNS 子项、规则类型、缺 MATCH 一律转成警告；仅结构性错误拒绝导入。DNS fake-ip 降级为 redir-host，节点重名加 ` #2`。
+- 上限：节点 1024、规则 8192、单策略组组员 1024、单份配置 1 MiB、rule-provider 单文件 16 MiB 且最多 32 个。
+- GEOIP/GEOSITE：Dart 下载 geoip.dat/geosite.dat 到应用数据 `geo/`，宿主只读加载，缺失时显式拒绝。
+- RULE-SET / rule-providers：Dart 落盘 `providers/<sourceId>-<slug>.txt`，宿主注入 `type: file` 绝对路径，索引 BOM 容错。
+- 节点与策略组容忍规则：密码型协议（ss/trojan/hysteria2/anytls）不做用户名成对校验；VMess 仅 AEAD（alterId 必须 0）；load-balance/relay 组当前跳过该组并告警。
+- Windows TUN：计划任务 + 回环 TCP 提权协助进程（首次 UAC，之后 SYSTEM 常驼），非提权收到 `tun.enable` 返回 TUN_REQUIRES_ADMIN；TUN 与系统代理双向互斥；路由事务日志 `state/tun.json` 与异常退出恢复（status.tunRecovery）；设置页可卸载协助进程。
+- 宿主契约版本：capabilities 返回 `contractVersion`（当前 2），Dart 握手不匹配直接 HOST_OUTDATED；配置反序列化错误带字段细节，未知顶层字段降级为警告。
+
+验证方式与最近结果（2026-10-31）：
+
+- `cargo test --lib` 15 项、`cargo clippy --all-targets -- -D warnings`、`flutter analyze` 无问题、`flutter test` 82 项通过（含 HOST_OUTDATED 契约 2 项、tun_state 2 项）。
+- 真实订阅端到端（自建样本，体积 15.5 KB/1.7 KB，节点 51/6）：release 宿主（12:18 构建）对两份编译结果均 ok=true / state=running / port=17999；同一份编译结果在旧宿主（10-30 22:25 构建）上报 CONFIG_REJECTED，据此定位为宿主二进制过期而非编译字段错误。
+- 复现脚本与样本留在 `.artifacts/real2`、`.artifacts/real3`（已 gitignore）。
+
+已知限制：
+
+- 支持协议：http/socks5/ss/vmess/vless/trojan/anytls/hysteria/hysteria2；其它类型导入时丢弃并告警。
+- VMess alterId≠0 不支持；VLESS 只透传 xtls-rprx-vision。
+- WS 早期数据（ws-opts 的 max-early-data / early-data-header-name）不生效，按未知参数告警。
+- GEO 规则依赖应用数据目录存在 geoip.dat/geosite.dat，缺失时显式拒绝而非静默降级。
+- CONFIG_REJECTED 已定位并修复（旧宿主）；用户本机尚未复测确认，需重新构建后再启动。
+- TUN 真实转发（Wintun 网卡创建、流量走代理、关闭后恢复）未在用户机器上复测；卸载协助进程会再弹一次 UAC。
+- `flutter build windows --release` 仍受阻于 Windows Kits 注册表（KitsRoot10 指向不存在的路径）与 CMake 找不到 C++ 编译器；`flutter run -d windows` 可用。
+- 安卓未开始：缺 cmdline-tools（许可证状态未知），无真机/模拟器。
+
+下步计划：
+
+1. 用户在 `D:\FLVPcore` 重新构建（`tools/build_windows.ps1`）后复测两份订阅启动，确认 CONFIG_REJECTED 消失；再开一次 TUN 验证流量与关闭后的系统恢复。
+2. 继续订阅兼容：PROCESS-NAME/PROCESS-PATH、逻辑规则 AND/OR/NOT、load-balance 与 relay 策略组、Hysteria2 ports/mport、proxy-providers 与 sub-rules、DNS fake-ip/respect-rules/nameserver-policy、provider interval 定时刷新；每项保持“支持就透传、常见但未实现记警告、真正未知显式报错”。
+3. 安卓阶段：补 cmdline-tools 与真机，复用同一导入/编译/传输栈，按 FlClash 体验对齐。
+4. 环境：修复 Windows Kits 注册表或 VS C++ 工作负载后跑 `tools/build_windows.ps1` 与 `tools/verify_host.py`。
+
+以下 §1–§22 为历史增量记录，保留决策背景；与本节冲突时以本节为准。
 
 ## 1. 新会话第一个任务：调研 vpn-parser，再开始下一阶段开发
 
