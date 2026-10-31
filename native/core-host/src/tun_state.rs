@@ -77,18 +77,14 @@ fn ipv4(text: &str) -> Option<u32> {
     Some(value)
 }
 
-/// 只删本进程本该持有的路由，不碰系统其它条目。
+/// 只删本进程本该持有的路由（记录里的网段），不碰系统其它条目；
+/// 内核 auto_route 只添加该网段，不会添加 0/1 与 128/1 路由。
 pub fn cleanup_routes(address: &str, netmask: &str) {
     #[cfg(windows)]
     {
         if let Some(net) = network_of(address, netmask) {
             let _ = Command::new("route")
                 .args(["delete", &net, "mask", netmask, address])
-                .output();
-        }
-        for (net, mask) in [("0.0.0.0", "128.0.0.0"), ("128.0.0.0", "128.0.0.0")] {
-            let _ = Command::new("route")
-                .args(["delete", net, "mask", mask])
                 .output();
         }
     }
