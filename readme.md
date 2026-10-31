@@ -11,6 +11,7 @@ The blue mark in `assets/branding/floway.png` is the active application icon. `a
 ```powershell
 flutter pub get
 flutter run -d windows
+flutter run -d Android-devices
 ```
 
 Use any Flutter-supported device target to preview the responsive mobile shell.
