@@ -160,6 +160,25 @@ class _RiverpodBackend implements FlvpBackend {
   }
 
   @override
+  Future<void> addProfileFromLink(String url, String label) async {
+    await _ref
+        .read(profilesActionProvider.notifier)
+        .addProfileFromLink(url, label: label.isEmpty ? null : label);
+  }
+
+  @override
+  Future<void> deleteProfile(String id) async {
+    final profileId = int.tryParse(id);
+    if (profileId == null) return;
+    await _ref.read(profilesActionProvider.notifier).deleteProfile(profileId);
+  }
+
+  @override
+  Future<void> updateProfiles() async {
+    await _ref.read(profilesActionProvider.notifier).autoUpdateProfiles();
+  }
+
+  @override
   Future<void> setCurrentProfile(String id) async {
     final profileId = int.tryParse(id);
     if (profileId == null) return;

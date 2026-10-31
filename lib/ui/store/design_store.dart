@@ -48,6 +48,12 @@ abstract class FlvpBackend {
   Future<void> setMode(FlvpProxyMode value);
 
   Future<void> setCurrentProfile(String id);
+
+  Future<void> addProfileFromLink(String url, String label);
+
+  Future<void> deleteProfile(String id);
+
+  Future<void> updateProfiles();
 }
 
 class FlvpDesignStore extends ChangeNotifier {
@@ -250,7 +256,11 @@ class FlvpDesignStore extends ChangeNotifier {
   }
 
   void importSub(String name, String url) {
-    subs = [
+    final backend = this.backend;
+    if (backend != null) {
+      unawaited(backend.addProfileFromLink(url, name));
+      return;
+    }    subs = [
       ...subs,
       SubInfo(
         id: 's${DateTime.now().millisecondsSinceEpoch}',
@@ -291,7 +301,11 @@ class FlvpDesignStore extends ChangeNotifier {
   }
 
   void removeSub(String id) {
-    final snapshot = List.of(subs);
+    final backend = this.backend;
+    if (backend != null) {
+      unawaited(backend.deleteProfile(id));
+      return;
+    }    final snapshot = List.of(subs);
     final target = subs.where((sub) => sub.id == id).firstOrNull;
     final rest = subs.where((sub) => sub.id != id).toList();
     if ((target?.active ?? false) && rest.isNotEmpty) {
@@ -315,7 +329,11 @@ class FlvpDesignStore extends ChangeNotifier {
   }
 
   void refreshAllSubs() {
-    subs = [for (final sub in subs) sub.copyWith(updated: '刚刚')];
+    final backend = this.backend;
+    if (backend != null) {
+      unawaited(backend.updateProfiles());
+      return;
+    }    subs = [for (final sub in subs) sub.copyWith(updated: '刚刚')];
     notify('全部订阅已更新');
   }
 
