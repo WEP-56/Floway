@@ -1,5 +1,8 @@
 /// Navigation entries mirrored from the design's src/nav.ts.
-enum FlvpPageKey { dashboard, nodes, subs, settings }
+///
+/// The Windows rail and the Android navigation bar share the same five
+/// entries: 仪表盘 / 代理 / 配置 / 信息 / 设置 (TODO.md section 2).
+enum FlvpPageKey { dashboard, proxies, profiles, info, settings }
 
 class FlvpNavItem {
   const FlvpNavItem(this.key, this.label, this.icon);
@@ -13,14 +16,16 @@ class FlvpNavItem {
 
 const List<FlvpNavItem> flvpNavItems = [
   FlvpNavItem(FlvpPageKey.dashboard, '仪表盘', 'Gauge'),
-  FlvpNavItem(FlvpPageKey.nodes, '节点', 'Server'),
-  FlvpNavItem(FlvpPageKey.subs, '订阅', 'Rss'),
+  FlvpNavItem(FlvpPageKey.proxies, '代理', 'Server'),
+  FlvpNavItem(FlvpPageKey.profiles, '配置', 'Rss'),
+  FlvpNavItem(FlvpPageKey.info, '信息', 'Activity'),
   FlvpNavItem(FlvpPageKey.settings, '设置', 'Settings'),
 ];
 
 const Map<FlvpPageKey, String> flvpPageTitles = {
   FlvpPageKey.dashboard: '仪表盘',
-  FlvpPageKey.nodes: '节点',
-  FlvpPageKey.subs: '订阅',
+  FlvpPageKey.proxies: '代理',
+  FlvpPageKey.profiles: '配置',
+  FlvpPageKey.info: '信息',
   FlvpPageKey.settings: '设置',
 };

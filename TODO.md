@@ -323,3 +323,25 @@ Windows 侧边栏与 Android 底栏统一为五个主入口：**仪表盘 / 代�
 | Windows/Android 原生 | 上游根目录 `windows/`、`android/`、`plugins/`、`services/helper/`、`setup.dart` 与构建入口 | Floway 同平台目录与所需公共依赖。 |
 
 **范围结论：** 这是 FlClash Windows/Android 客户端的 Floway 前端替换工程。衡量完成与否，以原有适用功能在新界面中完整可用、入口合理、风格一致为准。
+
+## 14. 实施进度（2026-10-31）
+
+第一批「接上游运行基础，装配 Floway Shell 和五入口」已代码侧落地：
+
+| 项 | 状态 | 说明 |
+| --- | --- | --- |
+| BASE-01 上游运行基础纳管 | 完成 | FlClash v0.9.2（7fd417fb）的 `lib/`、`plugins/`、`core/`、`services/`、`assets/`、`arb/`、`shaders/`、`tool/`、`windows/`、`android/`、`test/` 与根构建文件已纳入 main，不再依赖被 gitignore 的 `cilent-example/FlClash`。包名由 `fl_clash` 改为 `floway`（584 个文件、2810 处），依赖树按上游 `pubspec.lock` 复现。 |
+| BASE-02 依赖合并 | 完成 | `pubspec.yaml` 以 Floway 包名保留上游依赖与 hooks，另加回 Floway 品牌资产与保留的 `test/widget_test.dart`。 |
+| BASE-03 lib/ui 装配 | 完成 | 上游 `lib/ui` 与 Floway `lib/ui` 就地叠加（仅 `icons` 同名，无文件冲突），Floway 页面落点与设计资产全部保留。 |
+| BASE-05 入口与窗口接线 | 完成 | 应用首页改为 Floway Shell；上游自带窗口标题栏让位给 Floway caption，窗口拖拽/最小化/最大化/关闭改接上游 `window` 插件，原先的 `window_manager` 依赖已移除。 |
+| BASE-06 许可证 | 完成 | 根 `License` 改为 GPL-3.0 全文，readme 增加许可证与上游出处说明。 |
+| §2 五入口导航 | 完成 | 仪表盘 / 代理 / 配置 / 信息 / 设置 已在 Windows 侧栏与 Android 导航栏就位，`FlvpPageKey` 与入口文案同步改名；信息页新增 Floway 风格骨架与连接/请求/DNS/日志四个分类标签。 |
+| §10 平台裁剪 | 部分 | 未引入 macOS / Linux 应用工程；Windows 可执行名与显示名、发行包 `app_name` 改为 Floway，Android 应用名补上 Floway。 |
+| 静态分析 | 通过 | `flutter analyze --no-pub lib test`：No issues found。 |
+
+未完成（后续批次）：
+
+- §4~§9 的逐页接线：所有页面仍读 `FlvpDesignStore` 预览数据，尚未调用上游 provider；`FlvpDesignStore` 的真实数据源替换（BASE-04）随之未完成。
+- §8 信息页的列表内容、搜索、详情与标签专属动作未接上游数据。
+- Android `applicationId` 仍为上游 `com.follow.clash`；Android 的 TUN / 前台服务等需本地实测确认。
+- 本机未安装 Go 工具链，未产出 mihomo 核心二进制；Windows / Android 构建与运行实测由本地完成。

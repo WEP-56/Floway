@@ -2,7 +2,7 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:window_manager/window_manager.dart';
+import 'package:window/window.dart';
 
 import '../design/motion.dart';
 import '../design/theme_scope.dart';
@@ -11,6 +11,7 @@ import '../icons/flvp_icon.dart';
 import '../nav.dart';
 import '../pages/dashboard_page.dart';
 import '../pages/import_sub_modal.dart';
+import '../pages/info_page.dart';
 import '../pages/nodes_page.dart';
 import '../pages/settings_page.dart';
 import '../pages/subscriptions_page.dart';
@@ -57,16 +58,16 @@ class _FlvpDesktopShellState extends State<FlvpDesktopShell> {
     if (!_windowControls) return;
     try {
       await action();
-    } catch (_) {
-      // No window manager (tests / unsupported host).
+    } catch (error) {
+      debugPrint('floway: window action failed: $error');
     }
   }
 
   Future<void> _toggleMaximize() => _window(() async {
-    if (await windowManager.isMaximized()) {
-      await windowManager.unmaximize();
+    if (await desktopWindow.isMaximized()) {
+      await desktopWindow.unmaximize();
     } else {
-      await windowManager.maximize();
+      await desktopWindow.maximize();
     }
   });
 
@@ -129,7 +130,7 @@ class _FlvpDesktopShellState extends State<FlvpDesktopShell> {
 
   Widget _caption(FlvpColors colors) => GestureDetector(
     behavior: HitTestBehavior.translucent,
-    onPanStart: (_) => _window(windowManager.startDragging),
+    onPanStart: (_) => _window(desktopWindow.startDragging),
     onDoubleTap: _toggleMaximize,
     child: SizedBox(
       height: 40,
@@ -147,7 +148,7 @@ class _FlvpDesktopShellState extends State<FlvpDesktopShell> {
                 _CaptionButton(
                   label: '最小化',
                   icon: const FlvpIcon('Minus', size: 15),
-                  onTap: () => _window(windowManager.minimize),
+                  onTap: () => _window(desktopWindow.minimize),
                 ),
                 _CaptionButton(
                   label: '最大化',
@@ -158,7 +159,7 @@ class _FlvpDesktopShellState extends State<FlvpDesktopShell> {
                   label: '关闭',
                   icon: const FlvpIcon('X', size: 15),
                   close: true,
-                  onTap: () => _window(windowManager.close),
+                  onTap: () => _window(desktopWindow.close),
                 ),
               ],
             ),
@@ -301,19 +302,20 @@ class _FlvpDesktopShellState extends State<FlvpDesktopShell> {
           ),
         ],
       ),
-      FlvpPageKey.nodes => FlvpButton(
+      FlvpPageKey.proxies => FlvpButton(
         variant: FlvpButtonVariant.tonal,
         size: FlvpControlSize.sm,
         icon: const FlvpIcon('Zap', size: 15),
         label: store.testing ? '测试中…' : '测试延迟',
         onPressed: store.testing ? null : store.testNodes,
       ),
-      FlvpPageKey.subs => FlvpButton(
+      FlvpPageKey.profiles => FlvpButton(
         size: FlvpControlSize.sm,
         icon: const FlvpIcon('Plus', size: 16),
         label: '导入订阅',
         onPressed: _openImport,
       ),
+      FlvpPageKey.info => null,
       FlvpPageKey.settings => null,
     };
 
@@ -371,12 +373,13 @@ class _FlvpDesktopShellState extends State<FlvpDesktopShell> {
                               onNavigate: (page) =>
                                   setState(() => _page = page),
                             ),
-                            FlvpPageKey.nodes => const FlvpNodesPage(
+                            FlvpPageKey.proxies => const FlvpNodesPage(
                               platform: FlvpPlatform.pc,
                             ),
-                            FlvpPageKey.subs => const FlvpSubscriptionsPage(
+                            FlvpPageKey.profiles => const FlvpSubscriptionsPage(
                               platform: FlvpPlatform.pc,
                             ),
+                            FlvpPageKey.info => const FlvpInfoPage(),
                             FlvpPageKey.settings => const FlvpSettingsPage(
                               platform: FlvpPlatform.pc,
                             ),

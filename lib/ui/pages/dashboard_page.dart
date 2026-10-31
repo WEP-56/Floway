@@ -404,7 +404,7 @@ class _DesktopDashboard extends StatelessWidget {
                     Expanded(child: upload),
                     Expanded(
                       child: _QuotaCard(
-                        onTap: () => onNavigate(FlvpPageKey.subs),
+                        onTap: () => onNavigate(FlvpPageKey.profiles),
                         stretch: true,
                       ),
                     ),
@@ -427,7 +427,7 @@ class _DesktopDashboard extends StatelessWidget {
                   ),
                 ),
                 _QuotaCard(
-                  onTap: () => onNavigate(FlvpPageKey.subs),
+                  onTap: () => onNavigate(FlvpPageKey.profiles),
                   stretch: false,
                 ),
               ],
@@ -453,7 +453,7 @@ class _DesktopDashboard extends StatelessWidget {
                   color: colors.ink,
                   borderRadius: BorderRadius.circular(999),
                   child: GestureDetector(
-                    onTap: () => onNavigate(FlvpPageKey.nodes),
+                    onTap: () => onNavigate(FlvpPageKey.proxies),
                     child: AnimatedContainer(
                       duration: FlvpMotion.hover,
                       height: 40,
@@ -624,7 +624,7 @@ class _MobileDashboard extends StatelessWidget {
         ),
         FlvpCard(
           padding: const EdgeInsets.all(16),
-          onTap: () => onNavigate(FlvpPageKey.nodes),
+          onTap: () => onNavigate(FlvpPageKey.proxies),
           child: Row(
             spacing: 14,
             children: [

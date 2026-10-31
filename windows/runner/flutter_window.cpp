@@ -2,6 +2,8 @@
 
 #include <optional>
 
+#include <window/window_plugin_runner.h>
+
 #include "flutter/generated_plugin_registrant.h"
 
 FlutterWindow::FlutterWindow(const flutter::DartProject& project)
@@ -28,7 +30,7 @@ bool FlutterWindow::OnCreate() {
   SetChildContent(flutter_controller_->view()->GetNativeWindow());
 
   flutter_controller_->engine()->SetNextFrameCallback([&]() {
-    this->Show();
+
   });
 
   // Flutter can complete the first frame before the "show window" callback is
@@ -53,6 +55,8 @@ FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
                               LPARAM const lparam) noexcept {
   // Give Flutter, including plugins, an opportunity to handle window messages.
   if (flutter_controller_) {
+    WindowPluginForwardVisibility(*flutter_controller_, message, wparam,
+                                  lparam);
     std::optional<LRESULT> result =
         flutter_controller_->HandleTopLevelWindowProc(hwnd, message, wparam,
                                                       lparam);

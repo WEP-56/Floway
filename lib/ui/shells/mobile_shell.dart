@@ -7,6 +7,7 @@ import '../icons/flvp_icon.dart';
 import '../nav.dart';
 import '../pages/dashboard_page.dart';
 import '../pages/import_sub_modal.dart';
+import '../pages/info_page.dart';
 import '../pages/nodes_page.dart';
 import '../pages/settings_page.dart';
 import '../pages/subscriptions_page.dart';
@@ -137,7 +138,7 @@ class _FlvpMobileShellState extends State<FlvpMobileShell> {
                                   ),
                                 ),
                                 const Spacer(),
-                                if (_page == FlvpPageKey.nodes)
+                                if (_page == FlvpPageKey.proxies)
                                   FlvpIconButton(
                                     label: '测试延迟',
                                     dimension: 44,
@@ -147,7 +148,7 @@ class _FlvpMobileShellState extends State<FlvpMobileShell> {
                                       child: const FlvpIcon('RefreshCw', size: 20),
                                     ),
                                   ),
-                                if (_page == FlvpPageKey.subs)
+                                if (_page == FlvpPageKey.profiles)
                                   FlvpIconButton(
                                     label: '更新全部订阅',
                                     dimension: 44,
@@ -185,9 +186,10 @@ class _FlvpMobileShellState extends State<FlvpMobileShell> {
                                   platform: FlvpPlatform.mobile,
                                   onNavigate: _go,
                                 ),
-                                FlvpPageKey.nodes => const FlvpNodesPage(platform: FlvpPlatform.mobile),
-                                FlvpPageKey.subs => const FlvpSubscriptionsPage(platform: FlvpPlatform.mobile),
-                                FlvpPageKey.settings => const FlvpSettingsPage(platform: FlvpPlatform.mobile),
+                                FlvpPageKey.proxies => const FlvpNodesPage(platform: FlvpPlatform.mobile),
+                                FlvpPageKey.profiles => const FlvpSubscriptionsPage(platform: FlvpPlatform.mobile),
+                                FlvpPageKey.info => const FlvpInfoPage(),
+                FlvpPageKey.settings => const FlvpSettingsPage(platform: FlvpPlatform.mobile),
                               },
                             ],
                           ),
@@ -198,7 +200,7 @@ class _FlvpMobileShellState extends State<FlvpMobileShell> {
                 ],
               ),
               // MD3 extended FAB — shrinks while scrolling, moves up for snackbars
-              if (_page == FlvpPageKey.subs)
+              if (_page == FlvpPageKey.profiles)
                 AnimatedPositioned(
                   duration: FlvpMotion.fab,
                   curve: FlvpMotion.easeEmph,
