@@ -28,6 +28,7 @@ enum RuleKind {
   destinationPort,
   geoIp,
   geoSite,
+  ruleSet,
 }
 
 const directTarget = 'builtin:direct';
@@ -159,6 +160,7 @@ class RuleSpec {
     RuleKind.destinationPort => 'DST-PORT',
     RuleKind.geoIp => 'GEOIP',
     RuleKind.geoSite => 'GEOSITE',
+    RuleKind.ruleSet => 'RULE-SET',
   };
 
   void validate() {
@@ -170,7 +172,10 @@ class RuleSpec {
       '规则参数为空或包含不支持的分隔符',
     );
     requireConfig(
-      !noResolve || kind == RuleKind.ipCidr || kind == RuleKind.geoIp,
+      !noResolve ||
+          kind == RuleKind.ipCidr ||
+          kind == RuleKind.geoIp ||
+          kind == RuleKind.ruleSet,
       'no-resolve 只适用于 IP 规则',
     );
     switch (kind) {
@@ -208,6 +213,11 @@ class RuleSpec {
         requireConfig(
           RegExp(r'^[A-Za-z0-9_!.-]{1,64}$').hasMatch(value),
           'GEOSITE 类别格式无效',
+        );
+      case RuleKind.ruleSet:
+        requireConfig(
+          RegExp(r'^[A-Za-z0-9_.-]{1,64}$').hasMatch(value),
+          '规则集名称格式无效',
         );
       case RuleKind.destinationPort:
         final port = int.tryParse(value);

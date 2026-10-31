@@ -55,6 +55,7 @@ class ConfigurationImporter {
                 'external-controller',
                 'log-level',
                 'dns',
+                'rule-providers',
               }.contains(k),
             ),
         '配置包含尚未支持的顶层字段；TUN、provider、Geo 资源及其他内核选项尚未开放',
@@ -275,10 +276,18 @@ class ConfigurationImporter {
           'DST-PORT' => RuleKind.destinationPort,
           'GEOIP' => RuleKind.geoIp,
           'GEOSITE' => RuleKind.geoSite,
+          'RULE-SET' => RuleKind.ruleSet,
           _ => throw const ConfigurationException(
-            '规则类型尚未支持；RULE-SET、PROCESS-NAME 与逻辑规则尚未接入',
+            '规则类型尚未支持；PROCESS-NAME、逻辑规则与内核高级匹配尚未接入',
           ),
         };
+        if (fields.first == 'RULE-SET') {
+          final providers = document['rule-providers'];
+          requireConfig(
+            providers is Map && providers.containsKey(fields[1]),
+            '规则集 ${fields[1]} 未在 rule-providers 中定义',
+          );
+        }
         if (fields.first == 'IP-CIDR6') {
           requireConfig(
             InternetAddress.tryParse(fields[1].split('/').first)?.type ==

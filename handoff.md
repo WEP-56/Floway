@@ -306,3 +306,18 @@ Windows only / 无迁移 / 固定内核且无自动更新继续生效。已扩�
 5. Rust：新增 `native/core-host/src/geo.rs`，只从本地目录读（`FLVP_GEO_DIR` 或 `FLVP_APP_SUPPORT_DIR/geo`），不跟 URL 自行更新；`config.rs` 把 GEOIP/GEOSITE 加入白名单，预检类别存在性（缺库/缺类别直接报错），并把真实数据库传入 `vp_rule::CompileEnv`（之前是 `&None`，内核会静默跳过）。
 
 已知缺口：`RULE-SET` / `rule-providers`、`lazy:true` 与 `load-balance`、DNS `fake-ip`/`respect-rules`/`nameserver-policy`、非 chrome 指纹、Hysteria2 `ports`/`mport`、TUN 全部未动。真实数据验证：Debug 宿主加载真实 geoip.dat / geosite.dat 后，含 GEOIP,CN + GEOSITE,category-ads-all 的配置启动成功；未知类别 GEOIP,ZZ、GEOSITE,__no_such_category__ 均返回 CONFIG_REJECTED。完整 flutter test 61 项通过（6 项 runtime 测试需 Debug 宿主，未启用）。flutter build windows 本轮未完成：设备 shell 的 PATH 无 cmake，VS 装在 D:\building，需 Developer Prompt。
+
+## 18. 增量：RULE-SET / rule-providers（2026-10-31）
+
+背景：真实订阅普遍带 `rule-providers` + `RULE-SET`。曾试过客户端展开成 `DOMAIN-SUFFIX`/`IP-CIDR`，但真实 provider 是十万级条目（Loyalsoldier `reject.txt` 5.6 MB），Profile 规则上限和启动耗时都撑不住，已废弃。
+
+落地方式（内核原生能力 + 本地文件）：
+
+- Dart：`RuleKind.ruleSet`；`ConfigurationImporter` 接受 `RULE-SET`，要求名称在 `rule-providers` 中定义（顶层白名单放开 `rule-providers`）；`RuleProviderStore`（`lib/core/rule_providers.dart`）下载被引用的 provider 原始载荷到 `<support>/providers/`，每份配置一份 `<sourceId>.json`，导入/刷新/激活时发布为 `index.json`；`removeConfiguration` 会清掉该配置的索引与文件。
+- 编译器不变：规则就是 `RULE-SET,name,target`，由内核在运行时匹配（`Matcher::RuleSetDomain/Ip/Classical`），不会膨胀到 Profile。
+- Rust：`providers.rs` 读索引，把 `rule-providers`（`type: file` + 绝对路径，反斜杠转正斜杠）注入配置文本，交给 vp-app 自己的 `load_providers`；`config.rs` 规则白名单加 `RULE-SET`、字段校验允许 `no-resolve`，预检复用同一份索引。
+- 错误语义：缺定义、未知 behavior、`type: file`/`inline`、缺 url、空内容、超 16 MiB、数量超 32 都抛中文 `ConfigurationException`；索引损坏，宿主报 `Rule provider index is not valid JSON`，不静默跳过。
+
+验证：`flutter analyze` 无问题；`flutter test` 71 项；`cargo test --lib` 13 项；`cargo clippy -D warnings` 通过；真实 5.6 MB provider 配置在 Debug 宿主 `ok=true / running`，未知名称 `CONFIG_REJECTED`。
+
+已知限制：`interval` 不自动更新（只在导入/刷新拉取）；不读本地 `path` 型 provider；`proxy-providers`、`sub-rules`、逻辑规则仍未接入。

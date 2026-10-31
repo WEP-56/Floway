@@ -29,8 +29,9 @@ impl PreparedConfig {
             return Err("Snapshot revision or SHA-256 is invalid".into());
         }
         let port = validate(&args.config)?;
+        let text = crate::providers::inject(&args.config)?;
         Ok(Self {
-            text: args.config,
+            text,
             hash,
             revision: args.revision,
             port,
@@ -262,7 +263,7 @@ pub fn validate(text: &str) -> Result<u16, String> {
         if (ty == "MATCH" && fields.len() != 2)
             || (ty != "MATCH"
                 && fields.len() != 3
-                && !((ty == "IP-CIDR" || ty == "GEOIP")
+                && !((ty == "IP-CIDR" || ty == "GEOIP" || ty == "RULE-SET")
                     && fields.len() == 4
                     && fields[3] == "no-resolve"))
             || fields
@@ -282,6 +283,7 @@ pub fn validate(text: &str) -> Result<u16, String> {
                 | "MATCH"
                 | "GEOIP"
                 | "GEOSITE"
+                | "RULE-SET"
         ) || (ty == "MATCH" && index + 1 != cfg.rules.len())
         {
             return Err("Unknown, unsupported or unreachable rule".into());
@@ -329,6 +331,7 @@ pub fn validate(text: &str) -> Result<u16, String> {
             || cfg.proxy_groups.iter().any(|g| g.name == name)
             || cfg.proxies.iter().any(|proxy| proxy.name == name)
     };
+    let providers = load_providers()?;
     vp_rule::compile(
         &upstream.rules,
         &vp_rule::CompileEnv {
@@ -336,10 +339,53 @@ pub fn validate(text: &str) -> Result<u16, String> {
             geosite: &geo.geosite,
             geoip: &geo.geoip,
             asn: &None,
-            providers: &HashMap::new(),
+            providers: &providers,
             sub_rules: &HashMap::new(),
         },
     )
-    .map_err(|_| "Strict rule compilation failed".to_owned())?;
+    .map_err(|errors| format!("Strict rule compilation failed: {}", errors.join("; ")))?;
     Ok(cfg.mixed_port)
+}
+
+fn load_providers() -> Result<HashMap<String, (vp_rule::provider::Behavior, String)>, String> {
+    let mut providers = HashMap::new();
+    let Some(base) = std::env::var_os("FLVP_APP_SUPPORT_DIR").map(std::path::PathBuf::from) else {
+        return Ok(providers);
+    };
+    let dir = base.join("providers");
+    let index = dir.join("index.json");
+    if !index.exists() {
+        return Ok(providers);
+    }
+    let raw = std::fs::read_to_string(&index)
+        .map_err(|_| "Rule provider index is unreadable".to_owned())?;
+    let value: serde_json::Value = serde_json::from_str(raw.trim_start_matches('\u{feff}'))
+        .map_err(|_| "Rule provider index is not valid JSON".to_owned())?;
+    let entries = value
+        .get("providers")
+        .and_then(|item| item.as_array())
+        .ok_or_else(|| "Rule provider index is missing providers".to_owned())?;
+    for entry in entries {
+        let name = entry
+            .get("name")
+            .and_then(|item| item.as_str())
+            .ok_or_else(|| "Rule provider entry is missing name".to_owned())?;
+        let raw = entry
+            .get("behavior")
+            .and_then(|item| item.as_str())
+            .ok_or_else(|| format!("Rule provider {name} is missing behavior"))?;
+        let behavior = vp_rule::provider::Behavior::parse(raw)
+            .map_err(|error| format!("Rule provider {name}: {error}"))?;
+        let file = entry
+            .get("file")
+            .and_then(|item| item.as_str())
+            .ok_or_else(|| format!("Rule provider {name} is missing file"))?;
+        if file.contains('/') || file.contains('\\') || file.contains("..") {
+            return Err(format!("Rule provider {name} has an unsafe file name"));
+        }
+        let payload = std::fs::read_to_string(dir.join(file))
+            .map_err(|_| format!("Rule provider {name} payload is unreadable"))?;
+        providers.insert(name.to_owned(), (behavior, payload));
+    }
+    Ok(providers)
 }

@@ -13,6 +13,7 @@ import 'package:uuid/uuid.dart';
 
 import 'geo_resources.dart';
 import 'profile.dart';
+import 'rule_providers.dart';
 import 'snapshot_store.dart';
 import 'transport.dart';
 
@@ -23,6 +24,8 @@ class ClientController extends ChangeNotifier {
   final compiler = const ConfigCompiler();
   GeoResources get geoResources =>
       GeoResources(Directory(p.join(store.root.path, 'geo')));
+  RuleProviderStore get ruleProviders =>
+      RuleProviderStore(Directory(p.join(store.root.path, 'providers')));
   Profile profile = Profile.initial();
   ConfigurationLibrary library = ConfigurationLibrary();
   int mixedPort = 17890;
@@ -262,6 +265,8 @@ class ClientController extends ChangeNotifier {
     final original = kind == ConfigurationSourceKind.remote
         ? await const SubscriptionFetcher().fetch(url!)
         : text ?? canonicalJson(manualProfile!.toJson());
+    final sourceId = const Uuid().v4();
+    await ruleProviders.ensureFor(sourceId, original);
     final parsed =
         manualProfile ??
         const ConfigurationImporter().parse(original, name: name);
@@ -269,7 +274,7 @@ class ClientController extends ChangeNotifier {
     final selected = parsed.nodes.firstOrNull?.id ?? directTarget;
     compiler.compile(parsed, mixedPort: mixedPort, selectedNodeId: selected);
     final entry = ConfigurationSource(
-      id: const Uuid().v4(),
+      id: sourceId,
       name: name,
       kind: kind,
       original: original,
@@ -296,6 +301,9 @@ class ClientController extends ChangeNotifier {
   Future<void> activateConfiguration(String id) => _execute(() async {
     final next = library.select(id);
     final source = next.active!;
+    if (!await ruleProviders.activate(source.id)) {
+      await ruleProviders.ensureFor(source.id, source.original);
+    }
     await _save(
       source.profile,
       selection: source.selectedNodeId,
@@ -304,6 +312,7 @@ class ClientController extends ChangeNotifier {
   });
 
   Future<void> removeConfiguration(String id) => _execute(() async {
+    await ruleProviders.forget(id);
     final next = library.remove(id);
     await store.saveClientState(
       profile,
@@ -319,6 +328,7 @@ class ClientController extends ChangeNotifier {
     requireConfig(old.kind == ConfigurationSourceKind.remote, '本地配置无需远程更新');
     final original = await const SubscriptionFetcher().fetch(old.url!);
     const importer = ConfigurationImporter();
+    await ruleProviders.ensureFor(old.id, original);
     final parsed = importer.reconcile(
       importer.parse(original, name: old.name),
       old,

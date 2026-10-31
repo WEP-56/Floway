@@ -123,3 +123,13 @@ python tools/verify_research.py --docs-only
 **真实验证补充**：Debug 宿主加载真实 geoip.dat / geosite.dat（Loyalsoldier 发布包）后，含 GEOIP,CN 与 GEOSITE,category-ads-all 的配置启动成功；GEOSITE,__no_such_category__ 与 GEOIP,ZZ 均返回 CONFIG_REJECTED。完整 flutter test 本地 61 项通过（6 项需 Debug 宿主的 runtime 测试本轮未启用）。
 
 **本轮未执行**：flutter build windows（设备 shell 的 PATH 无 cmake，Visual Studio 装在 D:\building，需 Developer Prompt）、Release 产物验收与任何 TUN 验证。
+
+## Windows RULE-SET / rule-providers 增量（2026-10-31）
+
+把 Clash 的 `rule-providers` + `RULE-SET` 接到内核原生实现上，不再把规则集展开成上万条规则。
+
+1. Dart：新增 `RuleKind.ruleSet`（`RULE-SET,name,target`，允许 `no-resolve`）；导入器接受 `RULE-SET`，要求名称在 `rule-providers` 中已定义，顶层白名单同步放开 `rule-providers`；新增 `lib/core/rule_providers.dart` 的 `RuleProviderStore`：按配置把被引用的 provider 原始载荷下载到 `<support>/providers/`，每份配置存 `<sourceId>.json` 索引，导入/刷新/激活时发布为 `index.json`。非 http/https 类型、未知 behavior、缺 url、空内容、超 16 MiB、缺定义一律报错，不静默跳过。
+2. Rust：新增 `native/core-host/src/providers.rs`，把索引转换成内核认识的 `rule-providers`（`type: file` + 本地绝对路径）注入配置文本，由 vp-app 自己的 `load_providers` 读取；宿主不联网、也不让内核按 URL 自动更新。`config.rs` 白名单加 `RULE-SET`（3 或 4 字段），预检用同一份索引编译。
+3. 验证（2026-10-31，本机 Windows 11 26100）：`flutter analyze` — No issues found；`flutter test` — 71 项通过；`cargo test --lib` — 13 项通过；`cargo clippy -D warnings` — 通过。
+4. 真实数据端到端：下载 Loyalsoldier `reject.txt`（5.6 MB、十万级域名）后，Debug 宿主启动含 `RULE-SET,reject,REJECT` 的配置返回 `ok=true / state=running`；`RULE-SET,nothere` 返回 `CONFIG_REJECTED: Strict rule compilation failed: rules[0]: RULE-SET "nothere" 未在 rule-providers 中定义`。
+5. 仍不支持：`type: file` / `inline` 的 provider（需读取任意本地路径，客户端侧显式拒绝）、`interval` 定时更新（只在导入/刷新时拉取）、`proxy-providers`、sub-rules、逻辑规则。

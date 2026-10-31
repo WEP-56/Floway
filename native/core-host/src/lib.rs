@@ -5,6 +5,7 @@ mod config;
 mod dns;
 mod geo;
 mod node_options;
+mod providers;
 mod system_proxy;
 
 use std::ffi::{CStr, CString, c_char};
