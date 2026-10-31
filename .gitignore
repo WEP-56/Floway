@@ -3,12 +3,21 @@ core-example/
 cilent-example/
 
 # Generated native artifacts (sources and lockfiles remain tracked).
+# Setup build hook output: Go core, Rust helper and the core manifest.json
+# (see build_config.yaml `output_dir`).
+/libclash/
+# Rust build output.
 native/core-host/target/
 native/vendor/target/
+services/helper/target/
+# Binaries copied into the Flutter runner / Android packaging.
 windows/core/*.exe
 android/app/src/main/jniLibs/
-tools/__pycache__/
+# Local tooling caches and logs.
 .artifacts/
+.verify/
+__pycache__/
+*.py[cod]
 
 # Flutter project.
 # Miscellaneous
@@ -40,7 +49,9 @@ migrate_working_dir/
 **/doc/api/
 **/ios/Flutter/.last_build_id
 .dart_tool/
+.flutter-plugins
 .flutter-plugins-dependencies
+.packages
 .pub-cache/
 .pub/
 /build/
@@ -59,4 +70,19 @@ app.*.map.json
 
 # Widget Preview related
 .widget_preview/
+
+# Visual Studio / MSVC intermediates (Windows runner builds).
+.vs/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+*.VC.db
+*.VC.opendb
+*.pdb
+*.ilk
+*.obj
+*.tlog
+*.iobj
+*.ipdb
 

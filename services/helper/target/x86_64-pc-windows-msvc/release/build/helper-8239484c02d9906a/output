@@ -1,4 +1,0 @@
-cargo:rustc-env=CORE_SHA256=e643d11e7d77f22d7390f90f04e1029f06ae47f255561dfbda7d7674b79329fb
-cargo:rustc-env=CORE_NAME=FlClashCore.exe
-cargo:rerun-if-env-changed=CORE_SHA256
-cargo:rerun-if-env-changed=CORE_NAME
