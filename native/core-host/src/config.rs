@@ -62,6 +62,11 @@ impl PreparedConfig {
                 message: "TUN 需要管理员协助进程；请先安装并启动协助进程后重试".into(),
             });
         }
+        if validated.tun_enabled && cfg!(target_os = "windows") {
+            // 驱动缺失时内核只会打一行 warn 然后当作启动成功，界面就会卡在
+            // 「已开启但没有流量」。这里提前拒绝并给出可执行的修复路径。
+            crate::wintun::require().map_err(Rejected::config)?;
+        }
         let text = crate::providers::inject(&args.config).map_err(Rejected::config)?;
         Ok(Self {
             text,

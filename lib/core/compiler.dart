@@ -89,7 +89,9 @@ class ConfigCompiler {
       'mode': 'rule',
       'log-level': 'warn',
       'ipv6': false,
-      'dns': profile.dns.toRuntimeJson(),
+      'dns': profile.dns.toRuntimeJson(
+        fakeIpRange: profile.tun.enabled ? profile.tun.fakeIpRange : null,
+      ),
       'tun': profile.tun.toRuntimeJson(),
       'proxies': [
         for (final node in profile.nodes)

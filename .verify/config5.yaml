@@ -1,0 +1,18 @@
+mixed-port: 17890
+allow-lan: false
+bind-address: 127.0.0.1
+mode: rule
+log-level: warn
+ipv6: false
+external-controller: 127.0.0.1:19090
+secret: verifytoken
+dns:
+  enable: false
+proxies: []
+proxy-groups:
+  - {name: G1, type: select, proxies: [DIRECT]}
+  - {name: G2, type: select, proxies: [REJECT]}
+  - {name: LB, type: load-balance, proxies: [G1, G2], strategy: round-robin}
+rules:
+  - "DST-PORT,18080,LB"
+  - "MATCH,DIRECT"

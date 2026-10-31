@@ -51,19 +51,43 @@ class DnsOptions {
     },
   };
 
-  Map<String, Object?> toRuntimeJson() => {
-    ...toJson(),
-    if (enabled) ...{
-      // vp-config rejects bare IP:port although the resolver accepts it.
-      // Use an explicit transport rather than widening upstream validation.
-      'nameserver': [
-        for (final s in nameservers) s.contains('://') ? s : 'udp://$s',
-      ],
-      'fallback': [
-        for (final s in fallbacks) s.contains('://') ? s : 'udp://$s',
-      ],
-    },
-  };
+  /// TUN 模式下必须走 fake-ip。
+  ///
+  /// 内核的 `auto-route` 只把 fake-IP 网段（默认 198.18.0.0/16）路由进隧道，
+  /// 不做全流量接管。域名必须先解析成 fake-IP 才会进入代理；用 redir-host
+  /// 拿到的是真实 IP，流量走物理网卡，出口仍是本机 IP。
+  ///
+  /// [fakeIpRange] 非空表示当前处于 TUN 模式；此时若用户没配上游，用国内
+  /// 公共 DNS 兜底，否则内核解析器没有可用上游。
+  Map<String, Object?> toRuntimeJson({String? fakeIpRange}) {
+    final tun = fakeIpRange != null;
+    final upstreams = enabled && nameservers.isNotEmpty
+        ? nameservers
+        : tun
+        ? _defaultTunNameservers
+        : const <String>[];
+    return {
+      ...toJson(),
+      if (tun) ...{
+        'enable': true,
+        'enhanced-mode': 'fake-ip',
+        'fake-ip-range': fakeIpRange,
+      },
+      if (upstreams.isNotEmpty) ...{
+        // vp-config rejects bare IP:port although the resolver accepts it.
+        // Use an explicit transport rather than widening upstream validation.
+        'nameserver': [
+          for (final s in upstreams) s.contains('://') ? s : 'udp://$s',
+        ],
+        'fallback': [
+          for (final s in fallbacks) s.contains('://') ? s : 'udp://$s',
+        ],
+      },
+    };
+  }
+
+  /// TUN 模式且用户未配置上游时的兜底解析器。
+  static const _defaultTunNameservers = ['223.5.5.5', '119.29.29.29'];
 
   factory DnsOptions.fromJson(Object? value, {void Function(String)? warn}) {
     requireConfig(value is Map, 'DNS 必须是对象');
@@ -90,8 +114,13 @@ class DnsOptions {
       warn?.call('DNS ipv6: true 暂未接入，已按 IPv4 查询处理');
     }
     final enhanced = m['enhanced-mode'];
-    if (enhanced != null && enhanced != 'redir-host') {
+    // fake-ip 只在 TUN 模式下有意义，且由 tun.fake-ip-range 统一决定池网段；
+    // 订阅里自带的 fake-ip-range 不采信，避免与 TUN 网段不一致。
+    if (enhanced != null && enhanced != 'redir-host' && enhanced != 'fake-ip') {
       warn?.call('DNS enhanced-mode $enhanced 暂未接入，已按 redir-host 处理');
+    }
+    if (enhanced == 'fake-ip') {
+      warn?.call('DNS fake-ip 由 TUN 模式自动启用，订阅内的池网段已忽略');
     }
     List<String> strings(String key) {
       final v = m[key] ?? (key == 'fallback' ? <String>[] : null);

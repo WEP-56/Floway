@@ -9,6 +9,8 @@ pub struct Dns {
     enable: bool,
     ipv6: Option<bool>,
     enhanced_mode: Option<String>,
+    /// TUN 模式下 fake-ip 池网段；由 `tun.fake-ip-range` 同步。
+    fake_ip_range: Option<String>,
     #[serde(default)]
     nameserver: Vec<String>,
     #[serde(default)]
@@ -32,6 +34,7 @@ impl Dns {
         if !self.enable {
             if self.ipv6.is_some()
                 || self.enhanced_mode.is_some()
+                || self.fake_ip_range.is_some()
                 || !self.nameserver.is_empty()
                 || !self.fallback.is_empty()
                 || self.fallback_filter.is_some()
@@ -40,14 +43,27 @@ impl Dns {
             }
             return Ok(());
         }
+        // TUN 模式必须用 fake-ip：内核只把 fake-IP 网段路由进隧道，
+        // redir-host 拿到真实 IP 就不会走代理。
+        let fake_ip = self.enhanced_mode.as_deref() == Some("fake-ip");
         if self.ipv6 == Some(true)
             || self
                 .enhanced_mode
                 .as_deref()
-                .is_some_and(|m| m != "redir-host")
+                .is_some_and(|m| m != "redir-host" && m != "fake-ip")
             || self.nameserver.is_empty()
+            || (fake_ip != self.fake_ip_range.is_some())
         {
             return Err(error());
+        }
+        if let Some(range) = &self.fake_ip_range {
+            let (address, prefix) = range.split_once('/').ok_or_else(error)?;
+            let ip: Ipv4Addr = address.parse().map_err(|_| error())?;
+            let prefix: u8 = prefix.parse().map_err(|_| error())?;
+            // 池太小会很快耗尽，太大又会覆盖真实地址段。
+            if prefix > 30 || !(ip.is_private() || ip.octets()[0] == 198 && ip.octets()[1] == 18) {
+                return Err(error());
+            }
         }
         for list in [&self.nameserver, &self.fallback] {
             if list.len() > 16 || list.iter().collect::<HashSet<_>>().len() != list.len() {
@@ -155,6 +171,34 @@ mod tests {
             "fallback": ["127.0.0.1:5354"], "fallback-filter": {"geoip": false,
                 "ipcidr": ["240.0.0.0/4", "2001:db8::/32"], "domain": ["+.example.test"]}})
         ));
+    }
+
+    #[test]
+    fn tun_mode_accepts_fake_ip_with_pool() {
+        // TUN 模式必须能表达 fake-ip，否则内核只路由 fake-IP 网段，
+        // 域名解析成真实 IP 就完全绕过代理。
+        assert!(valid(json!({"enable": true, "ipv6": false,
+            "enhanced-mode": "fake-ip", "fake-ip-range": "198.18.0.0/16",
+            "nameserver": ["223.5.5.5"]})));
+        assert!(valid(json!({"enable": true,
+            "enhanced-mode": "fake-ip", "fake-ip-range": "10.0.0.0/8",
+            "nameserver": ["223.5.5.5"]})));
+        for dns in [
+            // fake-ip 必须带池
+            json!({"enable": true, "nameserver": ["1.1.1.1"], "enhanced-mode": "fake-ip"}),
+            // 池不能挂在 redir-host 上
+            json!({"enable": true, "nameserver": ["1.1.1.1"], "enhanced-mode": "redir-host",
+                "fake-ip-range": "198.18.0.0/16"}),
+            // 池必须落在私有/保留段，不能覆盖真实地址
+            json!({"enable": true, "nameserver": ["1.1.1.1"], "enhanced-mode": "fake-ip",
+                "fake-ip-range": "8.8.8.0/24"}),
+            json!({"enable": true, "nameserver": ["1.1.1.1"], "enhanced-mode": "fake-ip",
+                "fake-ip-range": "198.18.0.0/31"}),
+            json!({"enable": true, "nameserver": ["1.1.1.1"], "enhanced-mode": "fake-ip",
+                "fake-ip-range": "198.18.0.0"}),
+        ] {
+            assert!(!valid(dns.clone()), "{dns}");
+        }
     }
 
     #[test]

@@ -13,12 +13,13 @@
 - GEOIP/GEOSITE：Dart 下载 geoip.dat/geosite.dat 到应用数据 `geo/`，宿主只读加载，缺失时显式拒绝。
 - RULE-SET / rule-providers：Dart 落盘 `providers/<sourceId>-<slug>.txt`，宿主注入 `type: file` 绝对路径，索引 BOM 容错。
 - 节点与策略组容忍规则：密码型协议（ss/trojan/hysteria2/anytls）不做用户名成对校验；VMess 仅 AEAD（alterId 必须 0）；load-balance/relay 组当前跳过该组并告警。
-- Windows TUN：计划任务 + 回环 TCP 提权协助进程（首次 UAC，之后 SYSTEM 常驼），非提权收到 `tun.enable` 返回 TUN_REQUIRES_ADMIN；TUN 与系统代理双向互斥；路由事务日志 `state/tun.json` 与异常退出恢复（status.tunRecovery）；设置页可卸载协助进程。
+- Windows TUN：计划任务 + 回环 TCP 提权协助进程（首次 UAC，之后 SYSTEM 常驻），非提权收到 `tun.enable` 返回 TUN_REQUIRES_ADMIN；TUN 与系统代理双向互斥；路由事务日志 `state/tun.json` 与异常退出恢复（status.tunRecovery）；设置页可卸载协助进程。
 - 宿主契约版本：capabilities 返回 `contractVersion`（当前 2），Dart 握手不匹配直接 HOST_OUTDATED；配置反序列化错误带字段细节，未知顶层字段降级为警告。
+- TUN 链路修复（2026-10-31 下午，详见 §17）：协助进程注册改走脚本文件 + 结果文件回传、协助进程注入 `--app-support-dir`、宿主预检 `wintun.dll` 并回读真实 TUN 运行时、`wintun.dll` 随包发布。
 
 验证方式与最近结果（2026-10-31）：
 
-- `cargo test --lib` 15 项、`cargo clippy --all-targets -- -D warnings`、`flutter analyze` 无问题、`flutter test` 82 项通过（含 HOST_OUTDATED 契约 2 项、tun_state 2 项）。
+- `cargo test --lib` 17 项（含 wintun 2 项）、`cargo clippy --all-targets -- -D warnings`、`flutter analyze` 无问题、`flutter test` 86 项通过（含 HOST_OUTDATED 契约 2 项、tun_state 2 项、提权传输 4 项）。
 - 真实订阅端到端（自建样本，体积 15.5 KB/1.7 KB，节点 51/6）：release 宿主（12:18 构建）对两份编译结果均 ok=true / state=running / port=17999；同一份编译结果在旧宿主（10-30 22:25 构建）上报 CONFIG_REJECTED，据此定位为宿主二进制过期而非编译字段错误。
 - 复现脚本与样本留在 `.artifacts/real2`、`.artifacts/real3`（已 gitignore）。
 
@@ -29,13 +30,13 @@
 - WS 早期数据（ws-opts 的 max-early-data / early-data-header-name）不生效，按未知参数告警。
 - GEO 规则依赖应用数据目录存在 geoip.dat/geosite.dat，缺失时显式拒绝而非静默降级。
 - CONFIG_REJECTED 已定位并修复（旧宿主）；用户本机尚未复测确认，需重新构建后再启动。
-- TUN 真实转发（Wintun 网卡创建、流量走代理、关闭后恢复）未在用户机器上复测；卸载协助进程会再弹一次 UAC。
+- TUN 真实转发（Wintun 网卡创建、流量走代理、关闭后恢复）仍未在用户机器上复测：本会话的沙箱不允许通过 UAC，注册协助进程这一步必须由用户手动点「是」。已提供 `tools/verify_tun.ps1` 一键验证。卸载协助进程会再弹一次 UAC。
 - `flutter build windows --release` 仍受阻于 Windows Kits 注册表（KitsRoot10 指向不存在的路径）与 CMake 找不到 C++ 编译器；`flutter run -d windows` 可用。
 - 安卓未开始：缺 cmdline-tools（许可证状态未知），无真机/模拟器。
 
 下步计划：
 
-1. 用户在 `D:\FLVPcore` 重新构建（`tools/build_windows.ps1`）后复测两份订阅启动，确认 CONFIG_REJECTED 消失；再开一次 TUN 验证流量与关闭后的系统恢复。
+1. 用户执行 `tools/build_windows.ps1` 重建，然后跑 `tools/verify_tun.ps1`（会弹一次 UAC），确认 `tunEnabled=true` 且出现 Wintun 网卡；再在应用内开 TUN 验证流量与关闭后的系统恢复。
 2. 继续订阅兼容：PROCESS-NAME/PROCESS-PATH、逻辑规则 AND/OR/NOT、load-balance 与 relay 策略组、Hysteria2 ports/mport、proxy-providers 与 sub-rules、DNS fake-ip/respect-rules/nameserver-policy、provider interval 定时刷新；每项保持“支持就透传、常见但未实现记警告、真正未知显式报错”。
 3. 安卓阶段：补 cmdline-tools 与真机，复用同一导入/编译/传输栈，按 FlClash 体验对齐。
 4. 环境：修复 Windows Kits 注册表或 VS C++ 工作负载后跑 `tools/build_windows.ps1` 与 `tools/verify_host.py`。
@@ -390,3 +391,123 @@ Windows only / 无迁移 / 固定内核且无自动更新继续生效。已扩�
 - 定位：用旧 `windows/core/flvp-core-host.exe`（2026-10-30 22:25）复现同样错误；当前源码 release 构建对同一两份编译结果均 ok=true/running。旧宿主 capabilities 无 contractVersion。
 - 修复：CONTRACT_VERSION=2 + 握手校验（HOST_OUTDATED）、OrdinaryConfig 未知顶层字段降级为警告、serde 错误带字段细节、刷新 windows/core 与 D:\FLVPcore 的宿主二进制。
 - 仍待用户侧：若曾用 `flutter run` 启动旧二进制，重新构建后即可；首次开 TUN 仍需 UAC。
+
+## 23. TUN「弹了 UAC 但开关不亮、随后超时」根因与修复（2026-10-31）
+
+用户现象：开 TUN 时 UAC 弹窗正常出现，但开关始终不变成开启，一段时间后显示超时。四个根因层层叠加，前一个掩盖后一个：
+
+1. **注册命令被拆词，任务从未建立**。旧实现用 `Start-Process schtasks.exe -ArgumentList '/Create','/F',...,'/TR','"<exe>" --elevated-serve'`。Windows PowerShell 5.1 会把 `-ArgumentList` 数组合并成一条命令行，`/TR` 的值在空格处被拆开，schtasks 收到多余参数后报 `ERROR: Invalid argument/option - '--elevated-serve'`，退出码 `0x80070057`。已实测复现。
+2. **外层退出码吞掉失败**。即使内层 `schtasks` 失败，外层 `powershell -Command` 仍返回 0，`ensureRunning()` 的 `if (result.exitCode != 0)` 永不为真；代码继续 `schtasks /Run`（同样静默失败），再轮询 10 秒后抛出「协助进程未能在 10 秒内就绪」。这就是「弹窗→不亮→超时」的完整链路。
+3. **协助进程拿不到数据目录**。计划任务启动的进程不继承调用方环境，`FLVP_APP_SUPPORT_DIR` 为空 → `network_lock` 为 `None` → 除 capabilities/status 外所有操作都返回 `NETWORK_OWNER_BUSY`。实测：不带 `--app-support-dir` 时 `systemProxy=false`，带上后 `systemProxy=true` 且 `state/network.lock` 落在指定目录。
+4. **TUN 失败被内核吞掉**。`vp-app::assemble` 对 TUN 只 `warn!` 一句就继续，`start` 返回 ok 但根本没有 Wintun 网卡；且 `wintun.dll` 不在任何运行时搜索路径里。
+
+修复：
+
+- `lib/core/elevated_host.dart`：注册/卸载改成「写脚本文件 → `Start-Process -Verb RunAs` 只传脚本路径 → 脚本把结果写回 `helper-task.result`」。命令行里不再拼业务参数，引号不会被层层重解析；外层退出码非 0（用户取消）与脚本内 ERR（注册失败）分别给出可读错误。改用 `ScheduledTasks` 模块建任务，显式关掉「电池供电不启动」和 72 小时执行上限，否则常驻进程会自己消失。新增 `helper-task.json` 记录 exe 与数据目录，路径变化时自动重注册。轮询从 10 秒放宽到 15 秒并带诊断文案。
+- 同文件 `ElevatedHostTransport`：改为按行队列 + 等待者列表，修掉握手应答与首个响应抢同一事件流导致丢包；并发请求复用单连接。同时修掉两个真实缺陷：`socket.cast()` 会把 sink 绑定到流导致后续无法写入，`IOSink.flush()` 自身会绑定 sink 导致并发 flush 抛 `StateError`。
+- `native/core-host/src/main.rs`：新增 `--app-support-dir`，在任何工作线程启动前设置 `FLVP_APP_SUPPORT_DIR`，解决根因 3。
+- `native/core-host/src/elevation.rs`：连接改为每连接一线程 + 共享 `Host`，避免长连接把健康探测卡死；`serve` 用 `mem::take` 接管 host。
+- 新增 `native/core-host/src/wintun.rs`：按内核同样的搜索顺序预检 `wintun.dll`（`WINTUN_DLL_PATH` → exe 同级 → exe/架构子目录 → cwd → `%LOCALAPPDATA%\vpcore` → `%TEMP%\vpcore` → System32），`config.rs` 在 `tun_enabled` 时先行拒绝并给出期望路径；capabilities 增加 `tunDriver`，`tun` 也要求驱动存在。
+- `native/core-host/src/lib.rs`：`Running::start` 在 TUN 请求后回读 `app.tun_runtime` 是否真的建立，未建立则中止并回滚，`status.tunEnabled` 改为真实运行时状态，另加 `tunRequested` 表示意图。杜绝「显示已开但没流量」。
+- 打包：`tools/build_windows.ps1` 复制 `wintun.dll` 到 `windows/core/`，`windows/CMakeLists.txt` 增加对应 `install(FILES ...)`。
+
+验证：`cargo test --lib` 17 项、`cargo clippy --all-targets -- -D warnings`、`flutter analyze` 无问题、`flutter test` 86 项（新增 `test/elevated_transport_test.dart` 4 项，用真实 socket 覆盖握手拒绝、并发响应归属、超时诊断、关闭后拒绝）。新增 `tools/verify_tun.ps1` 一键提权验证 TUN 建卡。未完成：本会话沙箱禁止 UAC 提权，根因 1/3/4 已用非提权路径与真实二进制分别验证，但「UAC 点是 → 任务建立 → 协助进程常驻 → Wintun 网卡出现」这一整链需用户手动跑一次 `tools/verify_tun.ps1` 确认。
+
+## 24. TUN 开启后代理被关掉、提示「被另一个实例管理系统代理」（2026-10-31）
+
+用户反馈：TUN 这次正确打开了，但代理随即被关闭；之后重启应用、操作开关都显示「被另一个实例管理系统代理」。
+
+现场取证：`state/network.lock` 被 PID 20356 独占，该进程是**旧构建**的常驻协助进程；它当时 `state=stopped` 完全空闲，却仍持有锁。`systemProxy=true` 只因为它拿着锁，并不代表代理真的开着。
+
+三个缺陷：
+
+1. **锁被永久持有（元凶）**。`recover_network_state()` 在每个请求上执行并一直把 `network_lock` 留在 `Host` 里。常驻协助进程只要收过一次 `capabilities`，就永远占着锁；之后普通宿主 `acquire` 必然失败 → 所有变更操作返回 `NETWORK_OWNER_BUSY`。这就是「被另一个实例管理」的直接来源，也是「代理被关掉」的原因：用户点开关时走到的是拿不到锁的普通宿主。
+2. **`stop()` 不释放锁**，即使释放了 running 也仍占着。
+3. **关闭 TUN 时只切传输不停核心**。`setTun(false)` 直接 `switchTransport(WindowsHostTransport())`，把 TUN 和路由留在系统里，而新宿主根本不知道它们存在。
+
+修复：
+
+- `lib.rs`：锁语义改为「仅在会改动网络状态的那一次操作期间持有」。`dispatch` 拆成 `dispatch`（取/还锁）+ `dispatch_locked`，变更成功后立即 `release_lock()`；`capabilities`/`status`/`stop`/`quit` 完全不碰锁（否则拿不到锁的实例连自己的核心都停不掉）。新增 `acquire_lock`/`release_lock`，锁失败信息改为「被其他实例占用，请稍后重试」。
+- `lib.rs`：`status.systemProxy` 与 `capabilities.systemProxy` 改为只看恢复日志 + 实际 WinINet 值（`system_proxy::is_active`），不再依赖 `network_lock.is_some()`；`stop()` 与 `start/apply` 里的系统代理判断同样改掉。锁不等于代理开启，这个混淆正是误报的根源。
+- `controller.dart` `setTun(false)`：切回普通宿主前先 `bridge.stop()`，让协助进程停下核心并清理 TUN 路由。
+- `elevated_host.dart`：`helper-task.json` 增加 `executableModified`，并且注册前通过控制面询问常驻进程自报的 exe 修改时间（`elevation.rs` 新增 `running_exe_modified_ms()`，hello 应答返回 `exeModifiedMs`）。只比对路径不够：**重新构建后路径不变，旧协助进程会一直跑下去，修复永远不生效**——这正是本次现场僵局的原因。判定过期就用提权脚本重注册，脚本里先 `Stop-ScheduledTask` + `Stop-Process` 结束旧进程再注册。
+- 测试：`lib.rs` 新增 `only_reads_and_cleanup_leave_the_network_lock_free`、`mutation_reports_busy_while_another_holder_exists`；`test/tun_options_test.dart` 新增「重新注册会先结束旧协助进程」（断言 `Stop-Process` 出现在 `Register-ScheduledTask` 之前）。测试支持目录改用线程本地 `SUPPORT_ROOT`，避免并行用例共享进程级 `FLVP_APP_SUPPORT_DIR` 互相污染。
+
+验证：`cargo test --lib` 19 项、clippy 干净、`flutter analyze` 无问题、`flutter test` 87 项。真实二进制双实例复现：常驻进程只发 `capabilities`/`status` 后，第二个宿主 `start` 返回 `ok=true state=running`（旧版此时是 `NETWORK_OWNER_BUSY`）；只读请求结束后锁立即空闲。
+
+用户侧待执行（旧版协助进程以 SYSTEM 运行，非提权无法结束）：先 `tools\cleanup_stale_helper.ps1`（提权）清掉占锁的老进程，再重建并重开 TUN。新版会在检测到二进制过期时自动结束旧进程并重注册，首次仍弹一次 UAC。
+
+## 25. 开 TUN 后连接被关、「活动配置与运行源不一致」、以及构建被锁（2026-10-31）
+
+用户清掉老进程后能启动了，但开 TUN 仍然把连接关掉，再点启动报「活动配置与运行源不一致」；随后 `flutter run -d windows` 直接构建失败（MSB3073 / cmake_install 退出 1）。三个独立缺陷：
+
+1. **`setTun` 只改 profile 不改配置仓库**。`SnapshotStore._validateLibrary` 要求 `library.active.profile == profile` 且选择一致，而 `setTun` 把**旧的** `library` 传给 `saveClientState`，于是抛「活动配置与运行源不一致」。该异常发生在 `switchTransport` **之后**——旧宿主已被关掉、新宿主还没启动，所以表现就是「一开 TUN 连接就被关掉」。`uninstallTunHelper` 与 `initialize` 里的 TUN 回退分支有同样问题。
+   修复：三处都改用 `library.saveActive(next, selection)` 同步活动条目，并且**先落盘再赋值内存**，避免异常后内存与磁盘不一致（原来内存已被改脏，后续任何保存都会被挡）。
+2. **失败后没有回滚**。切换传输本身会关掉原宿主，一旦后续步骤抛错，用户就停在「已断线 + 已切到协助进程」的死状态。新增 `_restoreAfterTunFailure`：切回普通宿主、按原配置重新 stage/start/commit，逐步兜底且不覆盖原始错误。
+3. **协助进程跑在构建目录里，锁住自己的 exe**。旧实现把计划任务的动作直接指向 `defaultHostExecutable()`（`build\windows\x64\runner\<cfg>\flvp-core-host.exe`）。运行中的 exe 被系统锁定，之后每次 `flutter run` 的 install 步骤都无法覆盖它 → `MSB3073`，且报错完全看不出原因。现场确认 PID 2492（SYSTEM）正锁着该文件。
+   修复：注册脚本先把 exe 与 `wintun.dll` 复制到 `%ProgramData%\FLVPcore\helper\`，任务指向这份稳定副本；`_stampMatches` 除比对源 exe 修改时间，还比对「运行中进程自报的 exe 修改时间」与副本磁盘时间，发现不一致就重注册（重注册前先 `Stop-ScheduledTask` + `Stop-Process`）。卸载脚本同时清理该目录。
+
+另加：`tools/build_windows.ps1` 增加前置检查，发现宿主二进制被占用时直接给出「关应用 / 跑 `cleanup_stale_helper.ps1`」的指引，不再让用户面对 MSB3073。
+
+回归测试：新增 `test/tun_state_sync_test.dart` 2 项（只改 profile 会被拒；`saveActive` 后可通过并正确重载）；`test/tun_options_test.dart` 新增「协助进程跑在稳定目录，不占用构建产物」（断言 `Copy-Item`、`ProgramData` 路径、`-Execute $helperExe`，且**不**包含指向构建产物的 `-Execute '<source>'`）。
+
+验证：`cargo test --lib` 19 项、clippy 干净、`flutter analyze` 无问题、`flutter test` 90 项；生成的注册/卸载脚本用 PowerShell 解析器校验通过；`flutter build windows --debug` 在文件未被锁时成功。
+
+用户侧待执行：`tools\cleanup_stale_helper.ps1`（提权，结束 PID 2492 这类跑在构建目录里的老协助进程）→ `tools\build_windows.ps1 -Configuration Debug` → 重启应用开 TUN。之后协助进程固定跑在 `%ProgramData%\FLVPcore\helper\`，不再影响构建。
+
+## 26. TUN 开着但不生效：出口仍是本机 IP（2026-10-31）
+
+现象：TUN 开关正常、网卡也建出来了，但访问 IP 查询网站显示本机 IP；系统代理模式下正常显示节点 IP。
+
+现场实测（TUN 开启时）：
+
+```
+Wintun 网卡  本地连接 5  Disconnected  ifIndex 12
+IPv4 地址    169.254.86.167/16     ← APIPA，198.18.0.1 没设上
+路由         198.18.0.0/16 → 0.0.0.0 (vpcore-tun)
+             0.0.0.0/1、128.0.0.0/1  ← 不存在
+默认路由     0.0.0.0/0 → 192.168.3.1 (WLAN)
+```
+
+根因不是「路由没接管」这么简单，而是内核 TUN 的设计前提被我们漏掉了：
+
+1. `vp-tun::auto_route::enable(address, netmask)` 计算 `net = address & netmask`，只加一条
+   `route add 198.18.0.0 mask 255.255.0.0 198.18.0.1 metric 1`——**只把 fake-IP 网段导进隧道**，
+   不做全流量接管。（`clean_all_routes()` 里删除 `0.0.0.0/1` 与 `128.0.0.0/1` 这两条双半区路由，
+   说明原设计意图存在，但 `enable()` 从未实现。）
+2. 因此域名必须先被解析成 **fake-IP**，流量才会进入隧道。而 `vp-app::start_tun_runtime` 在
+   `0.0.0.0:53` 起了带 fake-IP 池的解析器，`vp_core` 自己**不会**改系统 DNS——接管 DNS 是客户端的责任。
+3. 我们此前把 `enhanced-mode` 硬编码成 `redir-host`，并把订阅里的 `fake-ip` 一律降级，且从不接管系统
+   DNS。于是域名解析成真实 IP → 走物理网卡 → 出口就是本机 IP。**TUN 等于空转。**
+
+参考实现印证：`vpn-parser`（内核作者自己的客户端）在 `src/proxy/compiler/vp_core.rs` 里，TUN 模式会同时输出
+`tun{enable,address,netmask,mtu,fake-ip-range,auto-route,ring-capacity}` 与
+`dns{enhanced-mode: fake-ip, fake-ip-range}`；它的 `src/platform/mod.rs` 把网卡上的
+`127.0.0.1 / ::1 / 198.18.0.1 / 198.18.0.2` 当作内核 TUN 留下的痕迹在退出时恢复——正说明内核靠客户端改 DNS。
+FlClash 同理，靠 mihomo 的 `auto-route` + `dns-hijack: ['any:53']`。
+
+修复：
+
+- 新增 `native/core-host/src/system_dns.rs`：TUN 生效时把物理网卡 DNS 指向 `127.0.0.1`（内核的
+  `0.0.0.0:53` 解析器，回环不依赖路由），停止时按日志逐项恢复。沿用 `system_proxy` 的事务语义：
+  先落盘原值再改、改后读回校验、恢复前逐项比对（用户手工改过的保持不动）、原值为空表示 DHCP 自动获取
+  用 `-ResetServerAddresses` 恢复。启动自愈：发现残留日志且内核已不在则立即恢复，否则整机解析全废。
+- 宿主接线：`start` 闭包内 TUN 成功建立后接管 DNS，失败则 `running.stop()` 并返回
+  「TUN 已建立但无法接管系统 DNS」；`stop()`、热重载切到非 TUN、回滚到非 TUN 配置、启动自愈四处都会归还。
+  `enable` 做成幂等：已有事务且网卡仍指向我们时直接返回，避免「TUN 开着改配置」整条失败。
+- `dns.rs` 接受 `enhanced-mode: fake-ip` + `fake-ip-range`，并要求两者成对出现、池必须落在私有/保留段
+  且前缀 ≤ 30。
+- Dart `DnsOptions.toRuntimeJson(fakeIpRange:)`：TUN 模式强制 `enable: true` + `fake-ip` +
+  池网段，未配置上游时用 `223.5.5.5 / 119.29.29.29` 兜底。非 TUN 模式行为不变。
+- `status` 新增 `tunDnsHijacked`；`tools/cleanup_stale_helper.ps1` 增加 DNS 接管清理。
+
+验证：`cargo test --lib` 24 项、clippy 干净、`flutter analyze` 无问题、`flutter test` 92 项；
+真实宿主接受 fake-ip 配置（只报 `TUN_REQUIRES_ADMIN`）；DNS 枚举脚本在本机实测输出
+`WLAN|192.168.3.1`，与 `parse_dump` 期望格式一致。
+
+已知限制（内核设计，非本客户端问题）：`auto-route` 只覆盖 fake-IP 网段，所以**直连 IP 的流量不进隧道**
+（例如直接在浏览器输入 IP 访问）。按域名访问的流量正常代理。若将来要全流量接管，需要在 `auto_route`
+里补 `0.0.0.0/1` + `128.0.0.0/1`，并为代理服务器自身 IP 加旁路路由，否则隧道出口会回环。
+
+用户侧待验证：重建 → 开 TUN → 访问 IP 查询网站应显示节点 IP；关闭 TUN 后确认域名解析恢复正常
+（网卡 DNS 应回到 `192.168.3.1`）。

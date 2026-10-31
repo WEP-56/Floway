@@ -2,13 +2,34 @@ use std::io::{self, BufRead, Read, Write};
 
 use flvp_host::{Host, MAX_REQUEST_BYTES, init_logging};
 
+/// 计划任务启动的协助进程没有调用方的环境变量，必须从命令行拿到数据目录，
+/// 否则 `FLVP_APP_SUPPORT_DIR` 为空，网络锁与 TUN 事务日志全部落到空路径。
+fn apply_support_dir() -> Option<String> {
+    let mut args = std::env::args().skip(1);
+    while let Some(arg) = args.next() {
+        if let Some(value) = arg.strip_prefix("--app-support-dir=") {
+            // SAFETY: 单线程启动阶段设置，早于任何工作线程。
+            unsafe { std::env::set_var("FLVP_APP_SUPPORT_DIR", value) };
+            return Some(value.to_owned());
+        }
+        if arg == "--app-support-dir" {
+            let value = args.next()?;
+            unsafe { std::env::set_var("FLVP_APP_SUPPORT_DIR", &value) };
+            return Some(value);
+        }
+    }
+    None
+}
+
 fn main() -> io::Result<()> {
     init_logging();
+    apply_support_dir();
     let mut host = Host::default();
-    if std::env::args().nth(1).as_deref() == Some("--elevated-serve") {
+    let mode = std::env::args().nth(1);
+    if mode.as_deref() == Some("--elevated-serve") {
         return flvp_host::elevation::serve(&mut host);
     }
-    if std::env::args().nth(1).as_deref() == Some("--recover-system-proxy") {
+    if mode.as_deref() == Some("--recover-system-proxy") {
         let response = host.request(r#"{"requestId":"recovery","operation":"capabilities"}"#);
         if !response["result"]["systemProxyRecoveryError"].is_null() {
             return Err(io::Error::other(

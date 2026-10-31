@@ -7,6 +7,7 @@
 use std::io::{self, BufRead, BufReader, Write};
 use std::net::{IpAddr, TcpListener, TcpStream};
 use std::path::PathBuf;
+use std::sync::{Arc, Mutex};
 
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
@@ -16,6 +17,22 @@ use crate::MAX_REQUEST_BYTES;
 pub const HELPER_PORT: u16 = 38_765;
 pub const HELPER_TASK_NAME: &str = "FLVPcoreHelper";
 const HELPER_VERSION: &str = env!("CARGO_PKG_VERSION");
+
+/// 本进程正在运行的二进制自身的修改时间（Unix 毫秒）。
+///
+/// 用途：应用重新构建后路径不变，计划任务里注册的还是同一个路径。只有比对
+/// 「磁盘上的 exe」与「正在跑的 exe」才能发现协助进程其实是旧版本——旧进程
+/// 占着网络锁和 TUN 路由，必须被替换掉。
+fn running_exe_modified_ms() -> Option<u64> {
+    let modified = std::env::current_exe()
+        .ok()
+        .and_then(|path| std::fs::metadata(path).ok())
+        .and_then(|meta| meta.modified().ok())?;
+    modified
+        .duration_since(std::time::UNIX_EPOCH)
+        .ok()
+        .map(|d| d.as_millis() as u64)
+}
 
 pub fn helper_dir() -> Option<PathBuf> {
     let base = std::env::var_os("PROGRAMDATA")?;
@@ -113,7 +130,11 @@ fn respond(stream: &mut TcpStream, value: &Value) -> io::Result<()> {
     stream.flush()
 }
 
-fn serve_connection(mut stream: TcpStream, host: &mut crate::Host, token: &str) -> io::Result<()> {
+fn serve_connection(
+    mut stream: TcpStream,
+    host: &Arc<Mutex<crate::Host>>,
+    token: &str,
+) -> io::Result<()> {
     let peer = stream.peer_addr()?;
     if !matches!(peer.ip(), IpAddr::V4(ip) if ip.is_loopback()) {
         return Ok(());
@@ -133,6 +154,8 @@ fn serve_connection(mut stream: TcpStream, host: &mut crate::Host, token: &str) 
                 respond(
                     &mut stream,
                     &json!({"ok": true, "result": {"helper": true, "version": HELPER_VERSION,
+                        "exeModifiedMs": running_exe_modified_ms(),
+                        "pid": std::process::id(),
                         "elevated": is_elevated()}}),
                 )?;
             } else {
@@ -146,7 +169,16 @@ fn serve_connection(mut stream: TcpStream, host: &mut crate::Host, token: &str) 
             continue;
         }
         let quit = value["operation"] == "quit";
-        let response = host.request(&line);
+        let response = match host.lock() {
+            Ok(mut guard) => guard.request(&line),
+            Err(_) => {
+                return respond(
+                    &mut stream,
+                    &json!({"ok": false, "error": {"code": "HELPER_UNAVAILABLE",
+                        "message": "协助进程内部状态已损坏，请重新启用 TUN"}}),
+                );
+            }
+        };
         let ok = response["ok"] == true;
         respond(&mut stream, &response)?;
         if quit && ok {
@@ -156,7 +188,10 @@ fn serve_connection(mut stream: TcpStream, host: &mut crate::Host, token: &str) 
     Ok(())
 }
 
-/// 常驻服务入口：绑定回环端口，串行处理连接。
+/// 常驻服务入口：绑定回环端口，每个连接一个线程。
+///
+/// 连接必须并发：界面的长连接会一直占用，若串行处理，健康探测（每次
+/// 启停都会 ping）就会排在它后面直到超时。
 pub fn serve(host: &mut crate::Host) -> io::Result<()> {
     if !is_elevated() {
         return Err(io::Error::other(
@@ -166,10 +201,15 @@ pub fn serve(host: &mut crate::Host) -> io::Result<()> {
     let token = ensure_token()?;
     let listener = TcpListener::bind(("127.0.0.1", HELPER_PORT))?;
     write_endpoint()?;
+    let shared = Arc::new(Mutex::new(std::mem::take(host)));
     for stream in listener.incoming() {
         match stream {
             Ok(stream) => {
-                let _ = serve_connection(stream, host, &token);
+                let host = Arc::clone(&shared);
+                let token = token.clone();
+                std::thread::spawn(move || {
+                    let _ = serve_connection(stream, &host, &token);
+                });
             }
             Err(error) => {
                 eprintln!("helper connection failed: {error}");

@@ -69,10 +69,19 @@ class ClientController extends ChangeNotifier {
       // 上次退出时 TUN 仍开启：先连上协助进程，否则宿主会拒绝含 tun 的快照。
       if (profile.tun.enabled && Platform.isWindows) {
         try {
-          await HelperClient.ensureRunning(defaultHostExecutable());
+          await HelperClient.ensureRunning(
+            defaultHostExecutable(),
+            supportDirectory: store.root.path,
+          );
           await bridge.switchTransport(ElevatedHostTransport());
         } catch (exception) {
           profile = profile.copyWith(tun: profile.tun.copyWith(enabled: false));
+          // 回退也要同步活动配置，否则后续任何保存都会被
+          // 「活动配置与运行源不一致」挡住。
+          library = library.saveActive(
+            profile,
+            selectedNodeId ?? directTarget,
+          );
           error = 'TUN 未能恢复（${exception.toString()}），已回退为普通代理';
         }
       }
@@ -194,60 +203,145 @@ class ClientController extends ChangeNotifier {
       if (enabled == profile.tun.enabled && bridge.status.running) {
         return;
       }
-      if (enabled) {
-        await HelperClient.ensureRunning(defaultHostExecutable());
-        await bridge.switchTransport(ElevatedHostTransport());
-      } else {
+      final previousProfile = profile;
+      final previousLibrary = library;
+      final previousSelection = selectedNodeId ?? directTarget;
+      try {
+        if (enabled) {
+          await HelperClient.ensureRunning(
+            defaultHostExecutable(),
+            supportDirectory: store.root.path,
+          );
+          await bridge.switchTransport(ElevatedHostTransport());
+        } else {
+          // 先让协助进程停下它的核心并清理 TUN 路由，再切回普通宿主。
+          // 直接切走会把 TUN 和路由留在系统里，而新宿主根本不知道它们的存在。
+          if (bridge.transport is ElevatedHostTransport) {
+            try {
+              await bridge.stop();
+            } catch (_) {
+              // 协助进程已消失时 stop 必然失败；路由由新宿主的启动恢复兜底。
+            }
+          }
+          await bridge.switchTransport(
+            WindowsHostTransport(supportDirectory: store.root.path),
+          );
+        }
+        await bridge.initialize();
+        final selection = selectedNodeId ?? directTarget;
+        final next = profile.copyWith(
+          tun: profile.tun.copyWith(enabled: enabled, autoRoute: enabled),
+        );
+        // 配置仓库里的活动条目必须一起更新：store 会校验
+        // 「活动配置 == 运行源」，只改 profile 会直接抛
+        // 「活动配置与运行源不一致」，而此时旧宿主已经被切走了。
+        final nextLibrary = library.saveActive(next, selection);
+        await store.saveClientState(
+          next,
+          mixedPort,
+          selection,
+          library: nextLibrary,
+        );
+        profile = next;
+        library = nextLibrary;
+        if (!_desiredRunning) return;
+        final config = compiler.compile(
+          next,
+          mixedPort: mixedPort,
+          selectedNodeId: selection,
+        );
+        final snapshot = await store.stage(
+          config,
+          profile: next,
+          selectedNodeId: selection,
+          library: nextLibrary,
+        );
+        await store.beginApply(snapshot, bridge.status.appliedRevision);
+        transition = CoreState.starting;
+        _notify();
+        await bridge.start(snapshot);
+        await store.commit(
+          bridge.status.appliedRevision,
+          bridge.status.configHash!,
+        );
+      } catch (_) {
+        // 切换传输会关掉原宿主，所以失败时必须自己把用户送回可用状态，
+        // 否则表现就是「一开 TUN 连接就被关掉」，且再也起不来。
+        profile = previousProfile;
+        library = previousLibrary;
+        await _restoreAfterTunFailure(previousProfile, previousLibrary, previousSelection);
+        rethrow;
+      }
+    });
+    if (error != null) throw StateError(error!);
+  }
+
+  /// TUN 切换失败后回到普通宿主，并按原配置重新拉起代理。
+  /// 每一步都单独兜底：这里已经在错误路径上，不能再抛出新错误盖住原因。
+  Future<void> _restoreAfterTunFailure(
+    Profile previousProfile,
+    ConfigurationLibrary previousLibrary,
+    String selection,
+  ) async {
+    try {
+      // 失败发生在切换之前（例如用户取消了 UAC）：原宿主还在正常跑，
+      // 此时重新 start 只会撞 ALREADY_RUNNING，直接返回即可。
+      if (bridge.transport is! ElevatedHostTransport && bridge.status.running) {
+        return;
+      }
+      if (bridge.transport is ElevatedHostTransport) {
+        try {
+          await bridge.stop();
+        } catch (_) {}
         await bridge.switchTransport(
           WindowsHostTransport(supportDirectory: store.root.path),
         );
+        await bridge.initialize();
       }
-      await bridge.initialize();
-      final next = profile.copyWith(
-        tun: profile.tun.copyWith(enabled: enabled, autoRoute: enabled),
-      );
-      profile = next;
-      await store.saveClientState(
-        next,
-        mixedPort,
-        selectedNodeId ?? directTarget,
-        library: library,
-      );
       if (!_desiredRunning) return;
+      await store.saveClientState(
+        previousProfile,
+        mixedPort,
+        selection,
+        library: previousLibrary,
+      );
       final config = compiler.compile(
-        next,
+        previousProfile,
         mixedPort: mixedPort,
-        selectedNodeId: selectedNodeId,
+        selectedNodeId: selection,
       );
       final snapshot = await store.stage(
         config,
-        profile: next,
-        selectedNodeId: selectedNodeId,
-        library: library,
+        profile: previousProfile,
+        selectedNodeId: selection,
+        library: previousLibrary,
       );
       await store.beginApply(snapshot, bridge.status.appliedRevision);
-      transition = CoreState.starting;
-      _notify();
       await bridge.start(snapshot);
       await store.commit(
         bridge.status.appliedRevision,
         bridge.status.configHash!,
       );
-    });
-    if (error != null) throw StateError(error!);
+    } catch (_) {
+      // 回滚失败时保留原始错误；用户仍可手动重连。
+    }
   }
 
   /// 卸载管理员协助进程并回到普通宿主；TUN 会同时关闭。\r
   Future<void> uninstallTunHelper() async {
     await _execute(() async {
+      final selection = selectedNodeId ?? directTarget;
       final next = profile.copyWith(tun: const TunOptions.disabled());
-      profile = next;
+      // 与 setTun 同理：活动配置必须同步，否则 store 校验会拒绝。
+      final nextLibrary = library.saveActive(next, selection);
       await store.saveClientState(
         next,
         mixedPort,
-        selectedNodeId ?? directTarget,
-        library: library,
+        selection,
+        library: nextLibrary,
       );
+      profile = next;
+      library = nextLibrary;
       if (bridge.transport is ElevatedHostTransport) {
         await bridge.switchTransport(
           WindowsHostTransport(supportDirectory: store.root.path),

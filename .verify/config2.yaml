@@ -1,0 +1,25 @@
+mixed-port: 17890
+allow-lan: false
+bind-address: 127.0.0.1
+mode: rule
+log-level: info
+ipv6: false
+external-controller: 127.0.0.1:19090
+secret: verifytoken
+dns:
+  enable: false
+proxies:
+  - {name: "node-a", type: http, server: 127.0.0.1, port: 17892}
+  - {name: "node-b", type: http, server: 127.0.0.1, port: 17893}
+proxy-groups:
+  - {name: G1, type: select, proxies: [DIRECT]}
+  - {name: G2, type: select, proxies: [DIRECT]}
+  - {name: LB, type: load-balance, proxies: [G1, G2], strategy: round-robin}
+  - {name: RELAY, type: relay, proxies: [G1, G2]}
+  - {name: PROXY, type: select, proxies: [DIRECT, node-a]}
+sub-rules:
+  grp: ["DOMAIN,localhost,PROXY"]
+rules:
+  - "SUB-RULE,(NETWORK,tcp),grp"
+  - "DST-PORT,18080,DIRECT"
+  - "MATCH,DIRECT"

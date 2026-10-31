@@ -7,8 +7,10 @@ pub mod elevation;
 mod geo;
 mod node_options;
 mod providers;
+mod system_dns;
 mod system_proxy;
 mod tun_state;
+mod wintun;
 
 use std::ffi::{CStr, CString, c_char};
 use std::io::{Read, Write};
@@ -83,6 +85,18 @@ impl Running {
             runtime.shutdown_timeout(Duration::from_secs(2));
             return Err("Required mixed listener is not ready".to_owned());
         }
+        // TUN 在核心里是可失败的旁路：设备/路由建不起来只会 warn。这里读回真实
+        // 运行时状态，否则界面会显示「TUN 已开启」而实际没有任何流量被接管。
+        if config.tun_enabled && !tun_runtime_active(&app) {
+            app.conns.close_all();
+            app.router.current().abort_background_tasks();
+            drop(app);
+            runtime.shutdown_timeout(Duration::from_secs(2));
+            return Err(
+                "TUN 虚拟网卡未建立：内核拒绝创建 Wintun 设备（通常是驱动缺失或权限不足）"
+                    .to_owned(),
+            );
+        }
         Ok(Self {
             app,
             runtime,
@@ -97,6 +111,11 @@ impl Running {
         // Runs outside Tokio. Runtime cancellation releases all listener sockets.
         self.runtime.shutdown_timeout(Duration::from_secs(2));
     }
+}
+
+/// 内核是否真的建立了 TUN 运行时（数据面 + fake-ip DNS + 路由守卫）。
+fn tun_runtime_active(app: &App) -> bool {
+    app.tun_runtime.read().map(|guard| guard.is_some()).unwrap_or(false)
 }
 
 fn socks_ready(port: u16) -> bool {
@@ -121,6 +140,8 @@ pub struct Host {
     network_recovery_error: Option<String>,
     network_lock: Option<std::fs::File>,
     tun_recovery: Option<String>,
+    /// 当前是否已把系统 DNS 指向内核的 fake-IP 解析器。
+    dns_hijacked: bool,
 }
 
 impl Host {
@@ -156,16 +177,32 @@ impl Host {
         req: &Request,
     ) -> Result<Value, (&'static str, String, Option<&'static str>)> {
         self.recover_network_state();
-        if app_support_root().is_some()
-            && self.network_lock.is_none()
-            && !matches!(req.operation.as_str(), "capabilities" | "status")
-        {
+        // 锁只保护「本实例当前在改动系统网络状态」这段时间。只读操作不碰锁；
+        // 启停清理也不碰锁，否则一个拿不到锁的实例连自己的核心都停不掉。
+        let mutating = !matches!(
+            req.operation.as_str(),
+            "capabilities" | "status" | "stop" | "quit"
+        );
+        if mutating && !self.acquire_lock() {
             return Err((
                 "NETWORK_OWNER_BUSY",
                 "另一个实例正在管理系统代理，或数据目录无法加锁".into(),
                 None,
             ));
         }
+        let result = self.dispatch_locked(req);
+        if mutating {
+            // 立刻归还：常驻协助进程如果一直攥着锁，普通宿主就再也拿不到，
+            // 表现为「系统代理被另一个实例管理」。
+            self.release_lock();
+        }
+        result
+    }
+
+    fn dispatch_locked(
+        &mut self,
+        req: &Request,
+    ) -> Result<Value, (&'static str, String, Option<&'static str>)> {
         if matches!(
             req.operation.as_str(),
             "start"
@@ -203,11 +240,14 @@ impl Host {
                     "coreBuildId": format!("{CORE_COMMIT}/flvp-host-{}+P001+P002", env!("CARGO_PKG_VERSION")),
                     "patches": ["P001-http-authority", "P002-dot-deadline"],
                     "ordinaryProxy": true, "vpn": false,
-                    "tun": cfg!(target_os = "windows") && elevation::is_elevated(),
+                    "tun": cfg!(target_os = "windows") && elevation::is_elevated()
+                        && wintun::locate().is_some(),
                     "elevated": elevation::is_elevated(),
+                    "tunDriver": wintun::locate().map(|path| path.display().to_string()),
                     "tunHelperPort": elevation::HELPER_PORT,
                     "tunInstallable": cfg!(target_os = "windows"),
-                    "systemProxy": cfg!(target_os = "windows") && self.network_lock.is_some(), "subscriptionImport": false,
+                    "systemProxy": cfg!(target_os = "windows")
+                        && app_support_root().is_some(), "subscriptionImport": false,
                     "systemProxyRecoveryError": self.network_recovery_error,
                     "hotReload": false, "applyStrategy": "restart-with-rollback",
                     "protocols": ["socks5", "http", "ss", "vmess", "vless", "trojan", "anytls", "hysteria", "hysteria2"],
@@ -221,8 +261,7 @@ impl Host {
                 }))
             }
             "status" => {
-                if self.network_lock.is_some()
-                    && let Some(root) = app_support_root()
+                if let Some(root) = app_support_root()
                     && root.join("state/system-proxy.json").exists()
                     && !system_proxy::is_active(&root)
                 {
@@ -291,10 +330,9 @@ impl Host {
                 }
                 let root = app_support_root();
                 let reenable = !config.tun_enabled
-                    && self.network_lock.is_some()
                     && root.as_deref().is_some_and(system_proxy::is_active);
-                if self.network_lock.is_some()
-                    && let Some(root) = &root
+                if let Some(root) = &root
+                    && system_proxy::is_active(root)
                 {
                     system_proxy::restore(root).map_err(|e| ("SYSTEM_PROXY_CONFLICT", e, None))?;
                 }
@@ -304,7 +342,8 @@ impl Host {
                 if let (Some(root), Some((address, netmask))) = (&root, &tun_target) {
                     let _ = tun_state::record(root, address, netmask);
                 }
-                let start = |config| -> Result<Running, String> {
+                let start = |config: PreparedConfig| -> Result<Running, String> {
+                    let tun = config.tun_enabled;
                     let running = Running::start(config)?;
                     if reenable
                         && let Some(root) = &root
@@ -312,6 +351,16 @@ impl Host {
                     {
                         running.stop();
                         return Err(error);
+                    }
+                    // TUN 只把 fake-IP 网段路由进隧道，域名必须先解析成 fake-IP
+                    // 才会进入代理。不接管 DNS 时域名解析成真实 IP，流量走物理
+                    // 网卡——表现就是「TUN 开着，出口还是本机 IP」。
+                    if tun
+                        && let Some(root) = &root
+                        && let Err(error) = system_dns::enable(root)
+                    {
+                        running.stop();
+                        return Err(format!("TUN 已建立但无法接管系统 DNS：{error}"));
                     }
                     Ok(running)
                 };
@@ -329,7 +378,14 @@ impl Host {
                             && let Some(root) = &root
                         {
                             tun_state::clear(root);
+                            // 新配置不再用 TUN：把系统 DNS 还回去。
+                            if let Err(error) = system_dns::restore(root) {
+                                self.network_recovery_error = Some(error);
+                            }
                         }
+                        self.dns_hijacked = root
+                            .as_deref()
+                            .is_some_and(system_dns::has_journal);
                         Ok(self.status())
                     }
                     Err(error) => {
@@ -349,8 +405,16 @@ impl Host {
                                             let _ = tun_state::record(root, &restart_tun.1, &restart_tun.2);
                                         } else {
                                             tun_state::clear(root);
+                                            // 回滚到非 TUN 配置：DNS 必须一起归还，
+                                            // 否则留着 127.0.0.1 而 TUN 不在，整机解析全废。
+                                            if let Err(error) = system_dns::restore(root) {
+                                                self.network_recovery_error = Some(error);
+                                            }
                                         }
                                     }
+                                    self.dns_hijacked = root
+                                        .as_deref()
+                                        .is_some_and(system_dns::has_journal);
                                     Err(("APPLY_FAILED", error, Some("restored")))
                                 }
                                 Err(_) => {
@@ -390,10 +454,11 @@ impl Host {
     }
 
     pub fn status(&self) -> Value {
-        let system_proxy = self.network_lock.is_some()
-            && app_support_root()
-                .as_deref()
-                .is_some_and(system_proxy::is_active);
+        // 系统代理是否生效只看恢复日志与实际 WinINet 值，与锁无关：
+        // 锁只表示「此刻有人正在改动」，不代表代理开着。
+        let system_proxy = app_support_root()
+            .as_deref()
+            .is_some_and(system_proxy::is_active);
         if let Some(running) = &self.running {
             let stats = running.app.stats.snapshot();
             let router = running.app.router.current();
@@ -405,7 +470,10 @@ impl Host {
                 "mixedPort": running.config.port, "upload": stats.upload,
                 "download": stats.download, "connections": running.app.conns.list().len(),
                 "selected": selected, "systemProxy": system_proxy,
-                "tunEnabled": running.config.tun_enabled, "tunAutoRoute": running.config.tun_auto_route,
+                "tunEnabled": running.config.tun_enabled && tun_runtime_active(&running.app),
+                "tunRequested": running.config.tun_enabled,
+                "tunAutoRoute": running.config.tun_auto_route,
+                "tunDnsHijacked": self.dns_hijacked,
                 "configWarnings": running.config.warnings,
                 "tunRecovery": self.tun_recovery,
                 "systemProxyRecoveryError": self.network_recovery_error})
@@ -415,6 +483,7 @@ impl Host {
                 "configHash": null, "mixedPort": null,
                 "upload": 0, "download": 0, "connections": 0, "selected": null,
                 "systemProxy": system_proxy, "tunEnabled": false, "tunAutoRoute": false,
+                "tunDnsHijacked": false,
                 "configWarnings": Vec::<String>::new(),
                 "tunRecovery": self.tun_recovery,
                 "systemProxyRecoveryError": self.network_recovery_error})
@@ -422,12 +491,18 @@ impl Host {
     }
 
     pub fn stop(&mut self) {
-        if self.network_lock.is_some()
-            && let Some(root) = app_support_root()
+        if let Some(root) = app_support_root()
             && let Err(error) = system_proxy::restore(&root)
         {
             self.network_recovery_error = Some(error);
         }
+        // DNS 必须先还回去：留着 127.0.0.1 而内核已停，整机域名解析全废。
+        if let Some(root) = app_support_root()
+            && let Err(error) = system_dns::restore(&root)
+        {
+            self.network_recovery_error = Some(error);
+        }
+        self.dns_hijacked = false;
         if let Some(running) = self.running.take() {
             let tun = (
                 running.config.tun_enabled,
@@ -445,43 +520,76 @@ impl Host {
         self.failed = false;
     }
 
+    /// 尝试在本次变更期间独占数据目录的网络状态锁。
+    fn acquire_lock(&mut self) -> bool {
+        if self.network_lock.is_some() {
+            return true;
+        }
+        let Some(root) = app_support_root() else {
+            // 没有数据目录就没有共享状态可争，单实例场景直接放行。
+            return true;
+        };
+        let lock = (|| -> std::io::Result<std::fs::File> {
+            std::fs::create_dir_all(root.join("state"))?;
+            let file = std::fs::OpenOptions::new()
+                .create(true)
+                .truncate(false)
+                .read(true)
+                .write(true)
+                .open(root.join("state/network.lock"))?;
+            file.try_lock().map_err(std::io::Error::other)?;
+            Ok(file)
+        })();
+        match lock {
+            Ok(file) => {
+                self.network_lock = Some(file);
+                true
+            }
+            Err(_) => {
+                self.network_recovery_error =
+                    Some("系统代理管理锁被其他实例占用，请稍后重试".into());
+                false
+            }
+        }
+    }
+
+    fn release_lock(&mut self) {
+        // drop 关闭句柄即释放文件锁。
+        self.network_lock = None;
+    }
+
     fn recover_network_state(&mut self) {
         if self.network_recovered {
             return;
         }
         self.network_recovered = true;
-        if let Some(root) = app_support_root() {
-            self.tun_recovery = tun_state::recover(&root);
+        let Some(root) = app_support_root() else {
+            return;
+        };
+        self.tun_recovery = tun_state::recover(&root);
+        // 上次异常退出可能把 DNS 留在 127.0.0.1：内核已经不在，整机解析会全废。
+        if system_dns::has_journal(&root)
+            && let Err(error) = system_dns::restore(&root)
+        {
+            self.network_recovery_error = Some(error);
         }
-        if let Some(root) = app_support_root() {
-            let lock = (|| -> std::io::Result<std::fs::File> {
-                std::fs::create_dir_all(root.join("state"))?;
-                let file = std::fs::OpenOptions::new()
-                    .create(true)
-                    .truncate(false)
-                    .read(true)
-                    .write(true)
-                    .open(root.join("state/network.lock"))?;
-                file.try_lock().map_err(std::io::Error::other)?;
-                Ok(file)
-            })();
-            match lock {
-                Ok(file) => {
-                    self.network_lock = Some(file);
-                    if let Err(error) = system_proxy::restore(&root) {
-                        self.network_recovery_error = Some(error);
-                    }
-                }
-                Err(_) => {
-                    self.network_recovery_error =
-                        Some("系统代理管理锁不可用，请关闭其他 FLVPcore 实例后重试".into())
-                }
-            }
+        // 恢复遗留事务需要独占锁；失败就如实报告，但不把锁留给自己。
+        if self.acquire_lock()
+            && let Err(error) = system_proxy::restore(&root)
+        {
+            self.network_recovery_error = Some(error);
         }
+        self.release_lock();
     }
 }
 
 fn app_support_root() -> Option<std::path::PathBuf> {
+    // 测试里用线程本地覆盖：cargo 每个测试一个线程，进程级环境变量会被
+    // 并行执行的其它用例看到，导致它们莫名其妙地去抢网络锁。
+    #[cfg(test)]
+    if let Some(root) = tests::support_root_override() {
+        return Some(root);
+    }
     std::env::var_os("FLVP_APP_SUPPORT_DIR").map(std::path::PathBuf::from)
 }
 
@@ -564,6 +672,34 @@ mod tests {
     use super::*;
     use sha2::{Digest, Sha256};
     use std::net::TcpListener;
+
+    thread_local! {
+        /// 本线程解析出的应用数据目录；只影响发起测试的线程。
+        static SUPPORT_ROOT: std::cell::RefCell<Option<std::path::PathBuf>> =
+            const { std::cell::RefCell::new(None) };
+    }
+
+    pub(super) fn support_root_override() -> Option<std::path::PathBuf> {
+        SUPPORT_ROOT.with(|root| root.borrow().clone())
+    }
+
+    /// 把支持目录绑定到本线程，并在作用域结束时还原。
+    struct SupportRoot(std::path::PathBuf);
+    impl SupportRoot {
+        fn new(tag: &str) -> Self {
+            let dir = std::env::temp_dir().join(format!("flvp-{tag}-{}", std::process::id()));
+            let _ = std::fs::remove_dir_all(&dir);
+            std::fs::create_dir_all(&dir).unwrap();
+            SUPPORT_ROOT.with(|root| *root.borrow_mut() = Some(dir.clone()));
+            Self(dir)
+        }
+    }
+    impl Drop for SupportRoot {
+        fn drop(&mut self) {
+            SUPPORT_ROOT.with(|root| *root.borrow_mut() = None);
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
 
     fn port() -> u16 {
         TcpListener::bind("127.0.0.1:0")
@@ -648,6 +784,35 @@ mod tests {
         config["rules"] = json!(["GEOSITE,cn,DIRECT", "MATCH,DIRECT"]);
         let error = config::validate(&config.to_string()).unwrap_err();
         assert!(error.contains("geosite.dat"), "{error}");
+    }
+
+    #[test]
+    fn only_reads_and_cleanup_leave_the_network_lock_free() {
+        // 复现场景：常驻协助进程收过 capabilities/status 后仍攥着锁，导致后来
+        // 的普通宿主永远拿不到，界面显示「系统代理被另一个实例管理」。
+        let _root = SupportRoot::new("lock");
+        let mut host = Host::default();
+        assert_eq!(call(&mut host, "capabilities", json!({}))["ok"], true);
+        assert_eq!(call(&mut host, "status", json!({}))["ok"], true);
+        // 只读请求跑完必须归还锁：新宿主能立刻再次拿到。
+        let mut second = Host::default();
+        assert!(second.acquire_lock(), "只读请求结束后仍占着网络锁");
+        second.release_lock();
+        assert_eq!(call(&mut host, "stop", json!({}))["ok"], true);
+    }
+
+    #[test]
+    fn mutation_reports_busy_while_another_holder_exists() {
+        let _root = SupportRoot::new("busy");
+        let mut holder = Host::default();
+        assert!(holder.acquire_lock());
+        let mut other = Host::default();
+        let response = call(&mut other, "select", json!({"name": "PROXY"}));
+        assert_eq!(response["error"]["code"], "NETWORK_OWNER_BUSY");
+        // 变更失败后不得把锁顺走，否则持有者释放后仍会互相卡死。
+        holder.release_lock();
+        assert!(other.acquire_lock());
+        other.release_lock();
     }
 
     #[test]
