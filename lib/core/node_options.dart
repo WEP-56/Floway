@@ -116,26 +116,54 @@ class NodeOptions {
       );
       protocols = List<String>.unmodifiable(m['alpn'] as List);
     }
+    String? clean(String? value) {
+      if (value == null || value.isEmpty) return null;
+      final lower = value.toLowerCase();
+      return lower == 'null' || lower == 'undefined' ? null : value;
+    }
+
+    var username = clean(text('username'));
+    var password = clean(text('password'));
+    final paired = protocol == NodeProtocol.http ||
+        protocol == NodeProtocol.socks5;
+    if (paired && (username == null) != (password == null)) {
+      warn?.call('节点认证信息不完整，已忽略用户名与密码');
+      username = null;
+      password = null;
+    }
+    var sni = text('sni');
+    if (sni != null &&
+        (sni.length > 253 ||
+            !RegExp(r'^[a-zA-Z0-9][a-zA-Z0-9.-]*$').hasMatch(sni))) {
+      warn?.call('节点参数 sni 不是合法主机名，已忽略');
+      sni = null;
+    }
+    final reality = m.containsKey('reality-opts')
+        ? RealityOptions.fromJson(m['reality-opts'])
+        : null;
+    var fingerprint = text('client-fingerprint');
+    if (fingerprint != null && (fingerprint != 'chrome' || reality == null)) {
+      warn?.call('节点参数 client-fingerprint 仅 Reality 生效，已忽略');
+      fingerprint = null;
+    }
     return NodeOptions(
-      username: text('username'),
-      password: text('password'),
+      username: username,
+      password: password,
       uuid: text('uuid'),
       cipher: text('cipher'),
       alterId: number('alterId'),
       tls: flag('tls'),
-      sni: text('sni'),
+      sni: sni,
       skipCertVerify: flag('skip-cert-verify'),
-      fingerprint: text('client-fingerprint'),
+      fingerprint: fingerprint,
       udp: flag('udp'),
       network: text('network'),
       flow: text('flow'),
       alpn: protocols,
       ws: m.containsKey('ws-opts')
-          ? WebSocketOptions.fromJson(m['ws-opts'])
+          ? WebSocketOptions.fromJson(m['ws-opts'], warn: warn)
           : null,
-      reality: m.containsKey('reality-opts')
-          ? RealityOptions.fromJson(m['reality-opts'])
-          : null,
+      reality: reality,
       authString: text('auth-str'),
       up: number('up'),
       down: number('down'),
@@ -306,8 +334,17 @@ class WebSocketOptions {
   final String path;
   final Map<String, String> headers;
   Map<String, Object?> toJson() => {'path': path, 'headers': headers};
-  factory WebSocketOptions.fromJson(Object? value) {
-    final m = jsonObject(value, {'path', 'headers'}, 'ws-opts');
+  factory WebSocketOptions.fromJson(Object? value, {void Function(String)? warn}) {
+    requireConfig(value is Map<String, dynamic>, 'ws-opts 必须是对象');
+    final raw = value as Map<String, dynamic>;
+    const supported = {'path', 'headers'};
+    for (final key in raw.keys.where((key) => !supported.contains(key))) {
+      warn?.call('ws-opts.$key 暂未接入，已忽略');
+    }
+    final m = <String, dynamic>{
+      for (final entry in raw.entries)
+        if (supported.contains(entry.key)) entry.key: entry.value,
+    };
     requireConfig(
       !m.containsKey('path') || m['path'] is String,
       'WebSocket 路径必须是字符串',

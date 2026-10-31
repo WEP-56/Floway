@@ -133,3 +133,13 @@ python tools/verify_research.py --docs-only
 3. 验证（2026-10-31，本机 Windows 11 26100）：`flutter analyze` — No issues found；`flutter test` — 71 项通过；`cargo test --lib` — 13 项通过；`cargo clippy -D warnings` — 通过。
 4. 真实数据端到端：下载 Loyalsoldier `reject.txt`（5.6 MB、十万级域名）后，Debug 宿主启动含 `RULE-SET,reject,REJECT` 的配置返回 `ok=true / state=running`；`RULE-SET,nothere` 返回 `CONFIG_REJECTED: Strict rule compilation failed: rules[0]: RULE-SET "nothere" 未在 rule-providers 中定义`。
 5. 仍不支持：`type: file` / `inline` 的 provider（需读取任意本地路径，客户端侧显式拒绝）、`interval` 定时更新（只在导入/刷新时拉取）、`proxy-providers`、sub-rules、逻辑规则。
+
+## 用户真实订阅回归（2026-10-31）
+
+样本：用户提供的两份自建订阅（地址不入库、不记录），分别为 51 个节点与 6 个节点。
+
+结果：两份均可完整导入并编译，节点无丢失（51/51、6/6）；宿主 start 返回 ok=true、state=running、mixedPort=17890。
+
+剩余字段级警告（不影响导入）：ipv6、unified-delay、tcp-concurrent、profile 尚未接入；client-fingerprint 仅在 Reality 下生效；ws-opts 的 max-early-data / early-data-header-name 暂不支持；非 ASCII 或非法 sni 已被忽略；lazy 按立即测速处理。
+
+验证方式：临时测试脚本读取订阅文本，调用 ConfigurationImporter.parse(warnings)、ConfigCompiler.compile，再把编译结果交给 native/core-host 的 start 操作；脚本与订阅文本仅存放于 .artifacts（已 gitignore），未提交。PowerShell 向宿主管道传递时需设 $OutputEncoding 为 UTF-8，否则非 ASCII 节点名会导致哈希校验失败。

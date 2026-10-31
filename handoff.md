@@ -321,3 +321,12 @@ Windows only / 无迁移 / 固定内核且无自动更新继续生效。已扩�
 验证：`flutter analyze` 无问题；`flutter test` 71 项；`cargo test --lib` 13 项；`cargo clippy -D warnings` 通过；真实 5.6 MB provider 配置在 Debug 宿主 `ok=true / running`，未知名称 `CONFIG_REJECTED`。
 
 已知限制：`interval` 不自动更新（只在导入/刷新拉取）；不读本地 `path` 型 provider；`proxy-providers`、`sub-rules`、逻辑规则仍未接入。
+
+## 19. 真实订阅兼容性增量（2026-10-31）
+
+- 导入改为逐项降级：顶层字段、节点参数、策略组字段、DNS 子项、规则类型未支持时记录字段级警告并降级，不再整份失败。
+- 节点级降级：client-fingerprint 仅 Reality 生效；ws-opts 未知子项忽略；非法或非 ASCII sni 忽略；http/socks5 单边凭据忽略；密码型协议（ss/trojan/hysteria2/anytls）不做用户名成对校验。
+- 策略组：未知成员移除、重复成员去重、空组跳过、interval/tolerance/健康 URL 归一化，load-balance/relay 暂不支持时只跳过该组。
+- 上限：节点 1024、规则 8192、策略组成员 1024、配置 1 MiB（Dart 与宿主同步）。
+- 回归：用户两份自建订阅均 100% 导入并启动成功（51/51、6/6 节点）；详见 docs/verification.md。
+- 待办：ipv6、unified-delay、tcp-concurrent、profile 等顶层字段仍未接入；TUN 仍未实现。
