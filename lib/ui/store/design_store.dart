@@ -36,6 +36,18 @@ const FlvpTraffic flvpHistoryBase = FlvpTraffic(up: 28.64, down: 173.25);
 
 const int flvpHistLength = 48;
 
+/// Floway 界面需要的最小后端能力：生产入口把界面动作转成上游能力，
+/// 预览页与测试不注入后端，行为与设计稿一致。
+abstract class FlvpBackend {
+  Future<void> setRunning(bool value);
+
+  Future<void> setSystemProxy(bool value);
+
+  Future<void> setTunMode(bool value);
+
+  Future<void> setMode(FlvpProxyMode value);
+}
+
 class FlvpDesignStore extends ChangeNotifier {
   FlvpDesignStore({AppSettings? settings, bool simulate = true})
     : _settings = settings ?? const AppSettings() {
@@ -43,6 +55,9 @@ class FlvpDesignStore extends ChangeNotifier {
       _speedTimer = Timer.periodic(const Duration(seconds: 1), (_) => _tick());
     }
   }
+
+  /// 生产入口注入的后端桥接；预览页与测试不注入。
+  FlvpBackend? backend;
 
   AppSettings _settings;
   AppSettings get settings => _settings;
@@ -150,9 +165,39 @@ class FlvpDesignStore extends ChangeNotifier {
     hist['up'] = [...hist['up']!.skip(1), speed.up];
   }
 
+  /* ---------- backend bridge ---------- */
+
+  /// 后端的权威运行状态回推；不再反向调用后端。
+  void syncRunning(bool value) {
+    if (running == value) return;
+    running = value;
+    if (!running) uptime = 0;
+    notifyListeners();
+  }
+
+  /// 后端的权威快捷开关状态回推；不再反向调用后端。
+  void syncShortcuts({bool? systemProxy, bool? tunMode, FlvpProxyMode? mode}) {
+    final unchanged =
+        (systemProxy == null || systemProxy == _settings.systemProxy) &&
+        (tunMode == null || tunMode == _settings.tunMode) &&
+        (mode == null || mode == _settings.mode);
+    if (unchanged) return;
+    _settings = _settings.copyWith(
+      systemProxy: systemProxy,
+      tunMode: tunMode,
+      mode: mode,
+    );
+    notifyListeners();
+  }
+
   /* ---------- actions ---------- */
 
   void toggleRunning() {
+    final backend = this.backend;
+    if (backend != null) {
+      unawaited(backend.setRunning(!running));
+      return;
+    }
     if (!running) uptime = 0;
     final wasRunning = running;
     running = !running;
@@ -262,7 +307,20 @@ class FlvpDesignStore extends ChangeNotifier {
   }
 
   void setSettings(AppSettings Function(AppSettings current) mutate) {
+    final before = _settings;
     _settings = mutate(_settings);
+    final backend = this.backend;
+    if (backend != null) {
+      if (_settings.systemProxy != before.systemProxy) {
+        unawaited(backend.setSystemProxy(_settings.systemProxy));
+      }
+      if (_settings.tunMode != before.tunMode) {
+        unawaited(backend.setTunMode(_settings.tunMode));
+      }
+      if (_settings.mode != before.mode) {
+        unawaited(backend.setMode(_settings.mode));
+      }
+    }
     notifyListeners();
   }
 

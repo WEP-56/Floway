@@ -346,3 +346,13 @@ Windows 侧边栏与 Android 底栏统一为五个主入口：**仪表盘 / 代�
 - Android `applicationId` 仍为上游 `com.follow.clash`；Android 的 TUN / 前台服务等需本地实测确认。
 - 本机未安装 Go 工具链，未产出 mihomo 核心二进制；Windows / Android 构建与运行实测由本地完成。- 上游核心源码 `core/Clash.Meta` 未纳入仓库（上游以 `.gitmodules` 声明为子模块，参考检出未含 gitlink，无法确定上游锁定的提交）；协议核心构建前需按该声明获取源码，且本机无 Go 工具链。
 - Windows 安装/便携产物的名称链已同步为 Floway（可执行名、显示名、安装器进程名与发行包名）；安装器里的上游出处链接与站点脚本仍指向上游，待打包批次处理。
+### 接线进展（2026-10-31 追加）
+
+已接上游能力（接线集中在 `lib/ui/backend.dart` 的 `FlvpBackendBinder`，界面侧仍经 `FlvpDesignStore`，预览页与测试不注入后端）：
+
+- 启动/停止主控：`setupActionProvider.setRunning`，状态读 `isStartProvider`；
+- 出站模式：`setupActionProvider.changeMode`，状态读 `patchClashConfigProvider.mode`；
+- 系统代理：`networkSettingProvider.systemProxy`；
+- TUN：`patchClashConfigProvider.tun.enable`。
+
+仍未接（下一批）：流量曲线与连接数（DASH 其余项）、节点与策略组（PROXY）、订阅与配置（PROFILE）、信息页记录、设置持久化回写（SET）；这些位置仍显示设计稿演示数据。

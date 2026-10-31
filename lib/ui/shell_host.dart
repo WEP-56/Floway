@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
+import 'backend.dart';
 import 'design/accents.dart';
 import 'design/theme_scope.dart';
 import 'design/tokens.dart';
@@ -29,7 +30,8 @@ class FlvpShellHost extends StatefulWidget {
 }
 
 class _FlvpShellHostState extends State<FlvpShellHost> with WidgetsBindingObserver {
-  late final FlvpDesignStore _store = widget.store ?? FlvpDesignStore();
+  late final FlvpDesignStore _store =
+      widget.store ?? FlvpDesignStore(simulate: false);
   final Map<(FlvpAccent, bool), FlvpColors> _palettes = {};
 
   @override
@@ -69,13 +71,16 @@ class _FlvpShellHostState extends State<FlvpShellHost> with WidgetsBindingObserv
         accent: accent,
         child: FlvpStoreScope(
           store: _store,
-          child: DefaultTextStyle(
-            style: flvpText(14, weight: FontWeight.w400, color: colors.ink),
-            child: Material(
-              color: colors.frame,
-              child: mobile
-                  ? FlvpMobileShell(initialPage: widget.initialPage)
-                  : FlvpDesktopShell(initialPage: widget.initialPage),
+          child: FlvpBackendBinder(
+            store: _store,
+            child: DefaultTextStyle(
+              style: flvpText(14, weight: FontWeight.w400, color: colors.ink),
+              child: Material(
+                color: colors.frame,
+                child: mobile
+                    ? FlvpMobileShell(initialPage: widget.initialPage)
+                    : FlvpDesktopShell(initialPage: widget.initialPage),
+              ),
             ),
           ),
         ),
