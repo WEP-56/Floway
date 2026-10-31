@@ -33,6 +33,7 @@ class FakeHost implements HostTransport {
         'ok': true,
         'result': {
           'protocolVersion': 1,
+      'contractVersion': 2,
           'coreVersion': '1.1.0',
           'hostVersion': 'test',
           'systemProxy': supportsSystemProxy,

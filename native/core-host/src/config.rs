@@ -91,6 +91,9 @@ struct OrdinaryConfig {
     proxies: Vec<Proxy>,
     proxy_groups: Vec<Group>,
     rules: Vec<String>,
+    /// 未识别的顶层字段不拒绝整份配置，逐个提示后忽略（与导入器一致的字段级降级）。
+    #[serde(flatten)]
+    extra: serde_json::Map<String, Value>,
 }
 
 #[derive(Deserialize)]
@@ -330,7 +333,9 @@ pub fn validate(text: &str) -> Result<Validated, String> {
         return Err("Runtime configuration exceeds 1 MiB".into());
     }
     let cfg: OrdinaryConfig = serde_json::from_str(text)
-        .map_err(|_| "Configuration contains invalid or unsupported fields".to_owned())?;
+        .map_err(|error| {
+            format!("Configuration contains invalid or unsupported fields: {error}")
+        })?;
     if cfg.mixed_port == 0
         || cfg.allow_lan
         || cfg.bind_address != "127.0.0.1"
@@ -341,7 +346,10 @@ pub fn validate(text: &str) -> Result<Validated, String> {
         return Err("Only loopback ordinary proxy mode is available in this build".into());
     }
     cfg.dns.validate()?;
-    let (tun_enabled, tun_auto_route, tun_address, tun_netmask, warnings) = cfg.tun.plan()?;
+    let (tun_enabled, tun_auto_route, tun_address, tun_netmask, mut warnings) = cfg.tun.plan()?;
+    for key in cfg.extra.keys() {
+        warnings.push(format!("顶层字段 {key} 不受支持，已忽略"));
+    }
     if cfg.proxies.len() > 1024 || cfg.rules.len() > 8192 {
         return Err("Configuration exceeds this milestone's resource limits".into());
     }

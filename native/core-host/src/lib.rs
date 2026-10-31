@@ -27,6 +27,9 @@ use config::PreparedConfig;
 pub const CORE_COMMIT: &str = "fa3e7430371930c440ffb1bdccc6869c63554a34";
 pub const MAX_REQUEST_BYTES: usize = 1024 * 1024;
 pub const PROTOCOL_VERSION: u32 = 1;
+/// 宿主与 Dart 侧的配置契约版本：任何字段/语义变更必须+1，
+/// 旧宿主与旧界面会在握手时直接报错，避免落成难懂的 CONFIG_REJECTED。
+pub const CONTRACT_VERSION: u32 = 2;
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -193,6 +196,7 @@ impl Host {
                 self.recover_network_state();
                 Ok(json!({
                     "protocolVersion": PROTOCOL_VERSION,
+                    "contractVersion": CONTRACT_VERSION,
                     "coreCommit": CORE_COMMIT,
                     "coreVersion": "1.1.0",
                     "hostVersion": env!("CARGO_PKG_VERSION"),

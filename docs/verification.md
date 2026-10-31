@@ -163,3 +163,20 @@ python tools/verify_research.py --docs-only
 - DNS：内核只在 TUN 内劫持报文，不改写系统 DNS，因此事务日志只覆盖路由（不伪造未做的 DNS 回滚）。
 - UI：设置页 TUN 开关已接真实流程，并新增「卸载管理员协助进程」按钮（`HelperClient.uninstall`），需要重新授权时点它即可。
 - 校验：cargo clippy -D warnings 通过；cargo test --lib 15 项通过；flutter analyze 无问题；flutter test 80 项通过。
+
+### 订阅启动失败的真因：旧宿主（2026-10-31）
+
+用户截图报 `CONFIG_REJECTED: Configuration contains invalid or unsupported fields`。用两份自建订阅在真实宿主上端到端复现：
+
+- 导入正常：sub1 51 节点/2 组/6 规则（17 条字段级警告），sub2 6 节点/2 组。
+- 用仓库里旧的 `windows/core/flvp-core-host.exe`（构建于 2026-10-30 22:25）start，两份都返回上述 CONFIG_REJECTED；用当前源码新构建的宿主（release 12:18）start，两份都 `ok=true / state=running / port=17999`（需要应用数据目录里存在 geoip.dat/geosite.dat）。
+- 旧宿主 capabilities 没有 `contractVersion`，新宿主返回 2；旧宿主既不接受当前编译出的节点形状，也不接受新字段，因此报的是 serde 的泛化错误。
+
+修复（不只刷新二进制）：
+
+1. 宿主新增 `CONTRACT_VERSION=2`，capabilities 返回 `contractVersion`；Dart 侧 `CoreBridge.contractVersion=2` 在握手时校验，不匹配直接报 `HOST_OUTDATED` 并提示运行 `tools/build_windows.ps1`，不再拖到 start 阶段变成难懂的 CONFIG_REJECTED。
+2. 宿主 `OrdinaryConfig` 对未知顶层字段改为字段级降级（flatten + 警告“顶层字段 X 不受支持，已忽略”），与导入器策略一致；结构性错误仍然拒绝。
+3. 配置反序列化错误现在带上 serde 细节（包含具体字段名）。
+4. 已用当前源码重新构建 release 宿主并覆盖 `windows/core/flvp-core-host.exe`（开发目录与 D:\FLVPcore 均刷新，SHA-256 37B02F3C…E238）。
+
+回归：cargo test --lib 15 项、clippy -D warnings 通过；flutter analyze 无问题；flutter test 82 项通过（新增 HOST_OUTDATED 契约测试 2 项）。

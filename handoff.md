@@ -345,3 +345,10 @@ Windows only / 无迁移 / 固定内核且无自动更新继续生效。已扩�
 - 宿主在 start/apply 成功与失败回滚、stop 各分支同步事务日志，避免“记录与实际运行不一致”。
 - Dart：CoreStatus 增加 tunEnabled/tunRecovery，设置页展示恢复提示并新增卸载协助进程按钮；FlvpDesignStore 提供默认拒绝实现。
 - 未做：卸载协助进程后的计划任务清理需提权（已用 RunAs 弹窗）；TUN 下的真实 wintun 转发依赖用户机器实测。
+
+## 22. 旧宿主导致 CONFIG_REJECTED（2026-10-31）
+
+- 现象：用户导入两份自建订阅后启动报 `CONFIG_REJECTED: Configuration contains invalid or unsupported fields`。
+- 定位：用旧 `windows/core/flvp-core-host.exe`（2026-10-30 22:25）复现同样错误；当前源码 release 构建对同一两份编译结果均 ok=true/running。旧宿主 capabilities 无 contractVersion。
+- 修复：CONTRACT_VERSION=2 + 握手校验（HOST_OUTDATED）、OrdinaryConfig 未知顶层字段降级为警告、serde 错误带字段细节、刷新 windows/core 与 D:\FLVPcore 的宿主二进制。
+- 仍待用户侧：若曾用 `flutter run` 启动旧二进制，重新构建后即可；首次开 TUN 仍需 UAC。

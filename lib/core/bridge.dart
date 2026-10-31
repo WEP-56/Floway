@@ -119,8 +119,19 @@ class CoreBridge {
     return result;
   }
 
+  /// 与宿主 CONTRACT_VERSION 保持一致；旧宿主会直接报错而不是拖到启动阶段。
+  static const contractVersion = 2;
+
   Future<void> initialize() async {
     capabilities = await _request('capabilities');
+    if (capabilities!['contractVersion'] != contractVersion) {
+      capabilities = null;
+      throw const CoreFailure(
+        'HOST_OUTDATED',
+        '原生宿主与当前界面版本不一致：请运行 tools/build_windows.ps1 重新构建后再启动',
+        null,
+      );
+    }
     if (capabilities!['protocolVersion'] != 1) {
       capabilities = null;
       throw const CoreFailure('PROTOCOL_MISMATCH', '原生宿主版本不兼容', null);
