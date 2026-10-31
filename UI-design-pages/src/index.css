@@ -3,7 +3,7 @@
 @custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
 
 /* ============================================================
-   FLVPcore — Material Design 3 (Expressive) tonal tokens
+   Floway — Material Design 3 (Expressive) tonal tokens
    Every color is derived from one seed hue (--h) so the whole UI
    can be re-tinted at runtime, Material You style.
    ============================================================ */

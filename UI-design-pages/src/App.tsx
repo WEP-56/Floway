@@ -27,7 +27,7 @@ function Preview() {
       <header className="mx-auto flex max-w-[1560px] flex-wrap items-center gap-4 px-6 pt-8 pb-8 sm:px-10">
         <AppMark size={40} />
         <div className="min-w-0">
-          <h1 className="text-[20px] font-semibold tracking-tight">FLVPcore</h1>
+          <h1 className="text-[20px] font-semibold tracking-tight">Floway</h1>
           <p className="mt-0.5 text-[12.5px] text-ink2">跨平台代理客户端 · 界面预览</p>
         </div>
 
@@ -82,7 +82,7 @@ function Preview() {
       <footer className="mx-auto max-w-[1560px] px-6 pb-12 text-center text-[11.5px] leading-relaxed text-ink3 sm:px-10">
         Material Design 3 Expressive · 以色差、阴影与形状区分层级，无分割线
         <br />
-        两端共享同一状态，所有按钮、开关、节点与订阅均可交互 · FLVPcore v1.4.2
+        两端共享同一状态，所有按钮、开关、节点与订阅均可交互 · Floway v1.4.2
       </footer>
     </div>
   );

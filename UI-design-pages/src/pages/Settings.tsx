@@ -511,7 +511,7 @@ function SettingsPanels({
         onClose={onClose}
         platform={platform}
         icon={<AppMark size={64} />}
-        title="FLVPcore"
+        title="Floway"
         subtitle={`版本 ${APP_VERSION} · ${BUILD_DATE}`}
       >
         <div className="space-y-2">

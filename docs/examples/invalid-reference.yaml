@@ -1,7 +1,0 @@
-proxy-groups:
-  - name: PROXY
-    type: select
-    proxies:
-      - missing-node
-rules:
-  - MATCH,PROXY

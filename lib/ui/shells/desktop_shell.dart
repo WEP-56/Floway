@@ -137,7 +137,7 @@ class _FlvpDesktopShellState extends State<FlvpDesktopShell> {
         children: [
           const Spacer(),
           Text(
-            'FLVPcore',
+            'Floway',
             style: flvpText(12, letterSpacing: 0.3, color: colors.ink3),
           ),
           Expanded(

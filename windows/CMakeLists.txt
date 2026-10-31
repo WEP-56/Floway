@@ -1,10 +1,10 @@
 # Project-level configuration.
 cmake_minimum_required(VERSION 3.14)
-project(flvpcore LANGUAGES CXX)
+project(floway LANGUAGES CXX)
 
 # The name of the executable created for the application. Change this to change
 # the on-disk name of your application.
-set(BINARY_NAME "flvpcore")
+set(BINARY_NAME "floway")
 
 # Explicitly opt in to modern CMake behaviors to avoid warnings with recent
 # versions of CMake.
@@ -74,20 +74,6 @@ set(INSTALL_BUNDLE_LIB_DIR "${CMAKE_INSTALL_PREFIX}")
 
 install(TARGETS ${BINARY_NAME} RUNTIME DESTINATION "${CMAKE_INSTALL_PREFIX}"
   COMPONENT Runtime)
-
-set(FLVP_HOST "${CMAKE_CURRENT_SOURCE_DIR}/core/flvp-core-host.exe")
-if(NOT EXISTS "${FLVP_HOST}")
-  message(FATAL_ERROR "Build the native host first: tools/build_windows.ps1")
-endif()
-install(FILES "${FLVP_HOST}" DESTINATION "${CMAKE_INSTALL_PREFIX}" COMPONENT Runtime)
-
-# Wintun 驱动必须和宿主 exe 放在同一目录：内核的 TUN 数据面靠它建虚拟网卡，
-# 而且它按 exe 同级目录优先搜索。
-set(FLVP_WINTUN "${CMAKE_CURRENT_SOURCE_DIR}/core/wintun.dll")
-if(NOT EXISTS "${FLVP_WINTUN}")
-  message(FATAL_ERROR "Build the native host first: tools/build_windows.ps1 (missing wintun.dll)")
-endif()
-install(FILES "${FLVP_WINTUN}" DESTINATION "${CMAKE_INSTALL_PREFIX}" COMPONENT Runtime)
 
 install(FILES "${FLUTTER_ICU_DATA_FILE}" DESTINATION "${INSTALL_BUNDLE_DATA_DIR}"
   COMPONENT Runtime)

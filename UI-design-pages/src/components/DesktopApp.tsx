@@ -148,7 +148,7 @@ export function DesktopApp() {
         {/* window caption */}
         <div className="flex h-10 shrink-0 items-center">
           <span className="flex-1" />
-          <span className="text-[12px] font-medium tracking-wide text-ink3">FLVPcore</span>
+          <span className="text-[12px] font-medium tracking-wide text-ink3">Floway</span>
           <div className="flex flex-1 justify-end">
             {[
               { icon: <Minus size={15} />, label: "最小化" },

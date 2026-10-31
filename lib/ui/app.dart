@@ -79,7 +79,7 @@ class _FlvpAppState extends State<FlvpApp> with WidgetsBindingObserver {
               : FlvpShellKind.desktop);
       final windows = !kIsWeb && Platform.isWindows;
       return MaterialApp(
-        title: 'FLVPcore',
+        title: 'Floway',
         debugShowCheckedModeBanner: false,
         color: colors.frame,
         theme: ThemeData(

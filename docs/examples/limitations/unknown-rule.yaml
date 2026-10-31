@@ -1,4 +1,0 @@
-# Accepted by upstream static validate; strict client validation must reject.
-rules:
-  - FLVP-UNKNOWN-TYPE,example.org,DIRECT
-  - MATCH,REJECT

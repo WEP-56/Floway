@@ -618,7 +618,7 @@ class _SettingsPanel extends StatelessWidget {
       ),
       _Panel.about => modal(
         icon: const FlvpAppMark(size: 64),
-        title: 'FLVPcore',
+        title: 'Floway',
         subtitle: '版本 $flvpAppVersion · $flvpBuildDate',
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
