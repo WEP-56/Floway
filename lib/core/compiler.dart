@@ -36,7 +36,7 @@ class CompiledConfig {
 
 class ConfigCompiler {
   const ConfigCompiler();
-  static const version = 'windows-policy.1';
+  static const version = 'windows-dns.1';
 
   CompiledConfig compile(
     Profile profile, {
@@ -89,7 +89,7 @@ class ConfigCompiler {
       'mode': 'rule',
       'log-level': 'warn',
       'ipv6': false,
-      'dns': {'enable': false},
+      'dns': profile.dns.toRuntimeJson(),
       'tun': {'enable': false, 'auto-route': false},
       'proxies': [
         for (final node in profile.nodes)

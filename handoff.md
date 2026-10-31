@@ -2,6 +2,8 @@
 
 更新：2026-10-30。工作区：`D:\FLVPcore`。本文供新会话直接接续，区分已实现能力、用户已确定的产品方向与待验证的实现方案。
 
+**最新接续入口：先读第 14–16 节，尤其第 16 节的收工状态和明日任务。** 前半部分保留早期调研/设计历史，不代表当前待办；vpn-parser 调研、Windows 系统代理、配置仓库、协议/策略组、分享链接及普通代理 DNS 子集都已有实现。用户最新方向仍为 **Windows 优先、暂停 Android、不做旧数据迁移、不自动更新内核、保留现有 UI，优先订阅兼容**。
+
 ## 1. 新会话第一个任务：调研 vpn-parser，再开始下一阶段开发
 
 用户新增参考项目：`D:\FLVPcore\cilent-example\vpn-parser`。目录已经确认存在，包含 Rust 工程、README、docs、发布记录等；**本会话尚未完成技术调研，不要把下面的用户线索当作已经核验的实现事实。**
@@ -253,3 +255,42 @@ Windows only / 无迁移 / 固定内核且无自动更新继续生效。已扩�
 公网结论有重要更新：同样 8 个样本额外用 Windows curl 复验，A 的 Hysteria / AnyTLS / SS 各 1 个成功（HTTPS 200 + 预期正文），合计 3/8；Dart HttpClient 仍 0/8，差异未定位。不可再简单描述为“全部公网节点不可用”，也不可宣称整个订阅已可用。诊断脚本只输出计数和 curl exit code，真实 URL 仍从对话/进程环境读取，未落盘。
 
 新增 `test/policy_groups_test.dart`、`test/policy_group_runtime_test.dart` 和 `integration_test/windows_policy_test.dart`。前者验证格式/图/更新；真实 runtime 验证规则分流、自动组失败成员切换、手动 A→B、重启选择；UI 集成验证下拉控件到真实 HTTP 上游。Windows only、无迁移、固定内核无自动更新继续生效。
+
+## 14. Windows 分享链接导入（2026-10-30）
+
+最新已实现：节点列表支持 HTTP、SOCKS5、VLESS、Trojan、Hysteria2 / `hy2` URI，及 UTF-8 Base64 / Base64URL 列表。VLESS 支持内核已有的 TCP/WS、TLS/Reality、SNI/ALPN、Vision、Host/path；Trojan 支持 TLS/SNI、TCP/WS；Hysteria2 支持密码、SNI 和证书校验。入口为 `lib/core/share_link.dart`，复用 `NodeOptions`、身份哈希、配置仓库刷新事务和 Rust eager outbound preflight。分享 URI 是节点列表，不承载完整规则/组/DNS。未知/重复 URI 参数、未实现传输/端口跳跃/混淆、无端口、损坏凭据会拒绝整份列表；错误包含行号但脱敏。
+
+新增 `test/share_link_test.dart`、`test/share_link_runtime_test.dart`。已通过：`flutter analyze`、完整 `flutter test`（58 项）、真实 Windows host 的分享协议预检，以及独立本地 VLESS v0 peer 的真实 HTTP 转发；集成检查包含 Base64 远程导入、更新重命名保留 UUID 和选择、非法刷新保留原 revision、重启恢复和再转发。Windows Release 已构建，Release host 的 12 项转发/生命周期检查及 36 个文档链接检查通过。未重新探测真实用户订阅。完整 Clash 订阅 DNS、Geo/GEOSITE、provider、load-balance、Hysteria2 ports/mport、非 chrome 指纹仍是明确缺口；TUN 继续保持关闭占位。Android 仍暂停。
+
+## 15. Windows 订阅 DNS resolver（2026-10-30）
+
+按用户要求继续深入参考 `cilent-example/`，重点核对 vpn-parser VP-Core 编译器（仍为 4735038）与 FlClash typed DNS 模型（7fd417f）。发现 vpn-parser 会删改 policy/添加 DNS 上游和 Geo URL；不将其转换视为无损兼容。固定 vp_core 普通代理可使用自定义 resolver，53 端口监听在 TUN 路径才启动。依据/差异/行为边界见 `docs/dns-compatibility.md`。
+
+新增 `lib/core/dns_options.dart`，Profile 级持久化、订阅导入/刷新与编译贯通；Rust `native/core-host/src/dns.rs` 独立校验。支持 redir-host、IPv4 查询、UDP/TCP IPv4、DoT IPv4、DoH、非 Geo fallback-filter 的 CIDR/+.domain。DNS 在规则/全局/直连模式均保留。拒绝 Fake-IP、listen、default-nameserver、nameserver-policy、respect-rules、Geo、IPv6 查询等未知/未生效语义；不改系统 DNS/路由、不创建 DNS listener。编译器版本 windows-dns.1。P002 选择性 vendor vp-dns，给 DoT connect/TLS/read 整体加 3 秒期限，其余 core 仍固定原提交，无自动升级。
+
+已通过 analyze、63 项 Flutter、12 项 Rust host、clippy、DNS crate 23 项本地测试和 4 项单独启用的公网 DoH/DoT 测试。Debug/Release host 均通过新 DNS runtime 2 项测试（节点 bootstrap/DIRECT、UDP/TCP、过滤/fallback、非法刷新保留旧 revision、DoT 3 秒回退、重启持久化），Release host 原有 12 项验收通过。Windows 正式入口 Release 已构建。未重新请求用户真实订阅，未构建 Android；完整 Clash 两份订阅仍不能无损导入。下一步仍需 Geo 资源快照/规则、lazy/负载均衡、Fake-IP/respect-rules 与指纹/端口跳跃等完整语义，不通过过滤字段伪造成功。
+
+## 16. 收工与明日接续（2026-10-30 → 2026-10-31）
+
+### 当前状态
+
+1. 本轮代码与文档仍在工作区，**尚未提交 Git**，包含未跟踪的新文件；新会话先 `git status --short`，不要 reset/clean 或覆盖这些成果。没有留下需要继续等待的构建、服务或模拟器任务。
+2. 最新正式入口 Windows Release 位于 `build/windows/x64/runner/Release/flvpcore.exe`，必须保留同目录 `flvp-core-host.exe`、DLL 与 data。本轮最终构建已包含分享链接和 DNS 增量；不要仅凭 runner exe 的旧修改时间判断 Flutter 业务代码未更新，Dart AOT 在 `data/app.so`。
+3. 最终验证：analyze 无问题，完整 Flutter **63 项**、Rust host **12 项**、clippy 通过；DNS crate **23 项本地 + 4 项显式启用的公网测试**通过；Release host 新 DNS runtime **2 项**及原有转发/生命周期 **12 项**通过；文档 **46 个**本地链接和代码围栏检查通过。复现细节见 `docs/verification.md` 最新段落。
+4. 本轮没有修改用户系统代理、Windows DNS 或路由，没有构建 Android，没有重新下载用户真实订阅。普通代理 resolver 与整机 DNS/TUN 接管仍是不同能力。公网 DNS 测试成功不等于用户代理节点或完整订阅成功。
+
+### 明日建议推进
+
+1. 继续优先**完整订阅兼容**。重点参考 `cilent-example/vpn-parser/`，并对照 FlClash 的字段模型；定位到源码、说明转换差异，再落入 FLVPcore typed schema、compiler、宿主独立校验和快照事务。既有参考结论见 `docs/client-reference-vpn-parser.md`、`docs/dns-compatibility.md`，无需重新把整个会话停在基础调研。
+2. 建议先选 **Geo 资源与 GEOIP/GEOSITE 规则闭环**：资源来源/版本/许可、大小和摘要、准备完成后随不可变快照发布、类别存在性预检、启动/回退时使用同一资源版本。固定内核缺资源会静默跳过规则，不能仅在导入器放行；也不能直接复制 vpn-parser 注入远程 URL、删除/替换规则的做法。不得让内核后台自行更新资源破坏快照一致性。
+3. 随后评估 **lazy 自动组和 load-balance**。当前仍仅 select、显式 lazy:false 的 url-test/fallback。已读源码中的待验证疑点：固定 `vp-router::Group::start_health_checks` 在 lazy=true 时直接退出；`Router::resolve_via` 会调用 `Group::pick`，负载均衡 connect 时可能再次选择，需独立测试真实轮询结果和统计归属。此处是源码疑点，尚未实现补丁或完成复现，不要写成已修复。
+4. DNS 后续仍需 default-nameserver/bootstrap、nameserver-policy、respect-rules、Fake-IP/映射和 IPv6 的真实契约；当前严格子集不能解决订阅 B 的完整 DNS。保留既有 resolver 行为说明：DoH 域名上游 bootstrap 用系统 DNS，多上游答案按内核并集合并，CIDR 过滤触发但 fallback 失败时仍可能返回主答案，未承诺强制拦截。
+5. 指纹、Hysteria2 ports/mport/混淆等仍是阻塞项，九种协议的严格子集不代表所有分享链接或 Clash 节点均可用。Dart HttpClient 与 curl 的公网差异仍未定位。用户提供的 A/B 订阅链接不在文档、fixtures 或日志中；若新会话没有可用对话/环境中的真实链接，需要用户重新提供后才能复验，不能自行猜测。
+
+### 实现入口与复现提醒
+
+- 分享 URI：`lib/core/share_link.dart`；DNS：`lib/core/dns_options.dart`、`native/core-host/src/dns.rs`；编译：`lib/core/compiler.dart`（`windows-dns.1`）；宿主能力：`native/core-host/src/lib.rs`。
+- 固定内核提交不变；`native/vendor/vp-protocol` 的 P001 与新增 `native/vendor/vp-dns` 的 P002 为选择性补丁。构建 ID 为 `+P001+P002`。来源、变更和测试见 `native/vendor/README.md`，不要修改参考 checkout 来代替正式补丁。
+- 当前环境 `python` 指向 WindowsApps 别名，脚本用 `py`：`py tools/verify_host.py --host native/core-host/target/release/flvp-core-host.exe`、`py tools/verify_research.py --docs-only`。
+- DNS 回归：`flutter test test/dns_options_test.dart test/dns_runtime_test.dart`；Release 运行测试可在该测试进程设置 `FLVP_TEST_HOST` 为 Release host 的绝对路径。DNS crate 单测用 `cargo test --locked --manifest-path native/vendor/vp-dns/Cargo.toml --lib --target-dir native/core-host/target`；不能从 host workspace 直接 `-p vp-dns` 测其 dev-dependencies。
+- 共享 typed schema、宿主或 vendor 改动后同步更新双层校验与测试，并重新构建 Windows；不运行 Android 构建。测试配置/公开 DNS 查询均不能替代真实订阅的完整导入与公网转发验收。

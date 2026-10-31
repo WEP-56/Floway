@@ -2043,6 +2043,24 @@ dependencies = [
 [[package]]
 name = "vp-dns"
 version = "1.1.0"
+dependencies = [
+ "bytes",
+ "httparse",
+ "rand 0.9.5",
+ "rcgen",
+ "serde_yaml",
+ "tokio",
+ "tokio-rustls",
+ "tracing",
+ "vp-common",
+ "vp-config",
+ "vp-rule",
+ "webpki-roots 0.26.11",
+]
+
+[[package]]
+name = "vp-dns"
+version = "1.1.0"
 source = "git+https://github.com/mateo-ki/vp_core?rev=fa3e7430371930c440ffb1bdccc6869c63554a34#fa3e7430371930c440ffb1bdccc6869c63554a34"
 dependencies = [
  "bytes",
@@ -2125,7 +2143,7 @@ dependencies = [
  "vp-config",
  "vp-core",
  "vp-crypto",
- "vp-dns",
+ "vp-dns 1.1.0 (git+https://github.com/mateo-ki/vp_core?rev=fa3e7430371930c440ffb1bdccc6869c63554a34)",
  "vp-plugin",
  "vp-router",
  "vp-rule",
@@ -2146,7 +2164,7 @@ dependencies = [
  "vp-common",
  "vp-config",
  "vp-core",
- "vp-dns",
+ "vp-dns 1.1.0 (git+https://github.com/mateo-ki/vp_core?rev=fa3e7430371930c440ffb1bdccc6869c63554a34)",
  "vp-rule",
  "vp-transport",
 ]
@@ -2193,7 +2211,7 @@ dependencies = [
  "tracing",
  "vp-common",
  "vp-core",
- "vp-dns",
+ "vp-dns 1.1.0 (git+https://github.com/mateo-ki/vp_core?rev=fa3e7430371930c440ffb1bdccc6869c63554a34)",
  "webpki-roots 0.26.11",
  "x25519-dalek",
 ]

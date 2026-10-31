@@ -2,6 +2,7 @@
 //! No upstream CLI, route cleaner, external controller, TUN or provider downloader.
 
 mod config;
+mod dns;
 mod node_options;
 mod system_proxy;
 
@@ -190,8 +191,8 @@ impl Host {
                     "coreCommit": CORE_COMMIT,
                     "coreVersion": "1.1.0",
                     "hostVersion": env!("CARGO_PKG_VERSION"),
-                    "coreBuildId": format!("{CORE_COMMIT}/flvp-host-{}+P001", env!("CARGO_PKG_VERSION")),
-                    "patches": ["P001-http-authority"],
+                    "coreBuildId": format!("{CORE_COMMIT}/flvp-host-{}+P001+P002", env!("CARGO_PKG_VERSION")),
+                    "patches": ["P001-http-authority", "P002-dot-deadline"],
                     "ordinaryProxy": true, "vpn": false, "tun": false,
                     "systemProxy": cfg!(target_os = "windows") && self.network_lock.is_some(), "subscriptionImport": false,
                     "systemProxyRecoveryError": self.network_recovery_error,
@@ -199,6 +200,10 @@ impl Host {
                     "protocols": ["socks5", "http", "ss", "vmess", "vless", "trojan", "anytls", "hysteria", "hysteria2"],
                     "groupTypes": ["select", "url-test", "fallback"],
                     "lazyHealthChecks": false,
+                    "dnsResolver": {"modes": ["system", "redir-host"],
+                        "transports": ["udp-ipv4", "tcp-ipv4", "dot-ipv4", "doh"],
+                        "fallbackFilter": ["ipcidr", "domain-suffix"],
+                        "systemDns": false, "fakeIp": false},
                     "ruleTypes": ["DOMAIN", "DOMAIN-SUFFIX", "DOMAIN-KEYWORD", "IP-CIDR", "NETWORK", "DST-PORT", "MATCH"]
                 }))
             }

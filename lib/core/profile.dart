@@ -3,6 +3,7 @@ import 'dart:io';
 
 part 'node_options.dart';
 part 'policy_group.dart';
+part 'dns_options.dart';
 
 enum RoutingMode { rule, global, direct }
 
@@ -243,6 +244,7 @@ class Profile {
     required List<ProxyNode> nodes,
     required List<RuleSpec> rules,
     List<PolicyGroup> groups = const [],
+    this.dns = const DnsOptions.system(),
     this.revision = 1,
     this.mode = RoutingMode.rule,
     this.finalTargetId = directTarget,
@@ -265,12 +267,14 @@ class Profile {
   final List<ProxyNode> nodes;
   final List<RuleSpec> rules;
   final List<PolicyGroup> groups;
+  final DnsOptions dns;
 
   Profile copyWith({
     String? displayName,
     List<ProxyNode>? nodes,
     List<RuleSpec>? rules,
     List<PolicyGroup>? groups,
+    DnsOptions? dns,
     RoutingMode? mode,
     String? finalTargetId,
   }) => Profile(
@@ -282,9 +286,11 @@ class Profile {
     nodes: nodes ?? this.nodes,
     rules: rules ?? this.rules,
     groups: groups ?? this.groups,
+    dns: dns ?? this.dns,
   );
 
   void validate() {
+    dns.validate();
     requireConfig(validId(id), '配置 ID 必须是 UUID');
     requireConfig(
       revision >= 1 && revision <= 0x1fffffffffffff,
@@ -357,6 +363,7 @@ class Profile {
     'nodes': nodes.map((n) => n.toJson()).toList(),
     'rules': rules.map((r) => r.toJson()).toList(),
     'groups': groups.map((g) => g.toJson()).toList(),
+    'dns': dns.toJson(),
   };
 
   factory Profile.fromText(String text) {
@@ -375,6 +382,7 @@ class Profile {
       'nodes',
       'rules',
       'groups',
+      'dns',
     }, 'profile');
     requireConfig(
       map['format'] == 'flvp-profile' && map['schemaVersion'] == 1,
@@ -400,6 +408,9 @@ class Profile {
       nodes: (map['nodes'] as List).map(ProxyNode.fromJson).toList(),
       rules: (map['rules'] as List).map(RuleSpec.fromJson).toList(),
       groups: (map['groups'] as List? ?? []).map(PolicyGroup.fromJson).toList(),
+      dns: map.containsKey('dns')
+          ? DnsOptions.fromJson(map['dns'])
+          : const DnsOptions.system(),
     );
     profile.validate();
     return profile;

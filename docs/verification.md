@@ -88,3 +88,26 @@ python tools/verify_research.py --docs-only
 新增 typed 策略组、基础 Clash 规则/IPv6 CIDR、独立组选择和双层引用图校验。`flutter analyze` 无问题，52 项 Flutter 测试通过（包括实际 Windows host 的分流、故障转移、A→B 和重启保留选择）；Rust 10 项、clippy 与宿主 12 项转发检查通过。`integration_test/windows_policy_test.dart -d windows` 已验证下拉选择驱动真实上游 A→B，截图 `.artifacts/ui/windows-policy-groups.png` 已目视检查，无溢出；界面数据来自本地合成测试。
 
 真实订阅探测新增独立 curl 客户端：A 的 Hysteria、AnyTLS、SS 各一个样本 HTTPS 200 + 正文校验通过，8 个抽样合计 3 个成功。Dart HttpClient 仍 0/8，差异未定位。两个真实订阅完整导入仍未完成，能力边界见 [最新记录](windows-configurations.md)。未做 Android 构建，未修改用户系统代理。
+
+## Windows 分享链接订阅增量（2026-10-30）
+
+新增 HTTP/SOCKS5、VLESS、Trojan、Hysteria2 / hy2 URI 列表及 Base64 入口，实际通过：
+
+1. `flutter analyze` 无问题；完整 `flutter test` 共 58 项通过。新增确定性编译、凭据单次解码、URI/Clash 身份保持、非法列表整体拒绝和错误脱敏检查。
+2. `flutter test test/share_link_runtime_test.dart test/native_protocol_contract_test.dart` 3 项通过。新分享链接的 VLESS Reality、VLESS WS、Trojan、Hysteria2 均通过真实 Windows Debug host eager preflight。独立本地 VLESS v0 peer 验证 wire UUID、目标域名及 HTTP 正文；远程 Base64 导入、改名更新、非法刷新保留运行状态、关闭/重启恢复各完成真实转发。
+3. `./tools/build_windows.ps1` 构建正式入口 Windows Release 成功；`py tools/verify_host.py --host native/core-host/target/release/flvp-core-host.exe` 原有 12 项真实转发和生命周期检查通过。
+4. `py tools/verify_research.py --docs-only` 36 个本地链接及代码围栏检查通过。
+
+没有重新请求用户真实订阅，没有证明完整 Clash DNS/Geo/provider/端口跳跃兼容，也没有证明新 URI 节点的公网互通。未构建 Android，未修改用户系统代理或系统路由。当前环境 `python` 命中 WindowsApps 别名而无输出退出，验证改用已安装的 `py` 启动器完成。
+
+## Windows 订阅 DNS resolver 增量（2026-10-30）
+
+参考 vpn-parser VP-Core 适配器与 FlClash typed DNS，再核对固定 vp_core 的 resolver/普通代理/TUN 路径。范围、差异及补丁见 [DNS 兼容](dns-compatibility.md)。实际通过：
+
+1. `flutter analyze` 无问题，`flutter test` 63 项通过；含 DNS 模型、导入/编译/模式保留、身份/持久化、非法/未知参数与脱敏。
+2. Rust 宿主 `cargo test --locked --manifest-path native/core-host/Cargo.toml --lib` 12 项通过；clippy `--all-targets -- -D warnings` 通过。
+3. DNS crate `cargo test --locked --manifest-path native/vendor/vp-dns/Cargo.toml --lib --target-dir native/core-host/target`：23 项本地测试通过，4 项公网测试默认忽略；包括新增 P002 DoT 握手总期限。单独加 `live_ -- --ignored` 后 4 项公网测试均通过（AliDNS DoH/DoT、Tencent DoH、Cloudflare/Google DoH，证书验证保持开启）。
+4. `test/dns_runtime_test.dart` 的 Debug/Release host 均通过 2 项测试：所有开放 DNS schema 的实际预检，以及独立本地 UDP/TCP DNS 驱动节点 bootstrap/DIRECT、域名/CIDR/NXDOMAIN fallback、非法刷新和宿主独立拒绝保留旧 revision、DoT 停滞约 3 秒后 fallback、重启后的持久化与再次转发。Release 复现时设置进程环境 `FLVP_TEST_HOST` 为 Release host 的绝对路径。
+5. `./tools/build_windows.ps1` 正式入口 Release 成功；Release `verify_host.py` 12 项转发/生命周期检查通过。本轮没有修改系统代理/路由/Windows DNS，没有 Android 构建，也未重新下载用户真实订阅。
+
+本轮早先尝试从 host workspace 直接测试依赖 crate，Cargo 因其非 workspace member 拒绝；随后改用该 crate 所在 vendor workspace 的 manifest 完成测试。两份真实订阅仍有未支持的 Geo/Fake-IP/respect-rules/高级传输等字段，不能据此宣称完整导入成功。

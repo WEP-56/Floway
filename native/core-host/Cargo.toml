@@ -36,4 +36,5 @@ strip = "symbols"
 
 [patch."https://github.com/mateo-ki/vp_core"]
 vp-protocol = { path = "../vendor/vp-protocol" }
+vp-dns = { path = "../vendor/vp-dns" }
 

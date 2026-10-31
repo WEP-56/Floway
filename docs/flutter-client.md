@@ -17,3 +17,5 @@ See [implementation, validation and remaining work](m0-implementation.md). Its U
 The current native host statically links the pinned vp_core Rust crates. The [vpn-parser reference study](client-reference-vpn-parser.md) records a later architectural goal: isolate the core behind a stable host adapter and ship a project-pinned runtime with FLVPcore releases, without runtime kernel auto-updates. This is not implemented yet; keep the current host as the runtime baseline until CLI lifecycle, readiness, rollback, resource paths and crash recovery are verified for an external process.
 
 From the repository root: `flutter analyze`, `flutter test`, and `flutter test integration_test/windows_smoke_test.dart -d windows` (or an Android device). Android integration tests are also implemented in that shared test file.
+
+Windows ordinary-proxy DNS now supports a typed redir-host resolver subset as part of each Profile, with strict host validation and restart/rollback. This does not change OS DNS or create a DNS listener. See [DNS compatibility, reference evidence and verification](dns-compatibility.md).

@@ -47,17 +47,11 @@ struct OrdinaryConfig {
     mode: String,
     log_level: String,
     ipv6: bool,
-    dns: Dns,
+    dns: crate::dns::Dns,
     tun: Tun,
     proxies: Vec<Proxy>,
     proxy_groups: Vec<Group>,
     rules: Vec<String>,
-}
-
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-struct Dns {
-    enable: bool,
 }
 
 #[derive(Deserialize)]
@@ -230,12 +224,12 @@ pub fn validate(text: &str) -> Result<u16, String> {
         || cfg.mode != "rule"
         || cfg.log_level != "warn"
         || cfg.ipv6
-        || cfg.dns.enable
         || cfg.tun.enable
         || cfg.tun.auto_route
     {
         return Err("Only loopback ordinary proxy mode is available in this build".into());
     }
+    cfg.dns.validate()?;
     if cfg.proxies.len() > 256 || cfg.rules.len() > 4096 {
         return Err("Configuration exceeds this milestone's resource limits".into());
     }

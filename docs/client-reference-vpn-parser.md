@@ -33,6 +33,8 @@
 
 ## 依据索引
 
+2026-10-30 DNS 接入补充：再次逐项核对 `vp_core.rs`，确认其 DNS 上游增补、policy 删除及 Geo 兜底会改变输入语义；FLVPcore 采取 typed、双层校验的普通代理 resolver 子集，不复制静默删改。另核对 FlClash 的 typed DNS 模型及固定 vp_core 的普通/TUN 路径，依据、差异和运行验收见 [Windows DNS 兼容](dns-compatibility.md)。
+
 - `cilent-example/vpn-parser/Cargo.toml`：包版本 1.15.8、MIT 许可与没有 vp_core crate dependency。
 - `cilent-example/vpn-parser/src/kernel/mod.rs`、`src/kernel/updater.rs`：内核种类、release tag 与平台资产。
 - `cilent-example/vpn-parser/src/proxy/adapter.rs`、`src/proxy/compiler/vp_core.rs`、`src/proxy/manager.rs`：编译器、CLI、子进程和 REST 调用链。

@@ -8,6 +8,7 @@ import 'package:yaml/yaml.dart';
 import 'configuration_library.dart';
 import 'compiler.dart';
 import 'profile.dart';
+import 'share_link.dart';
 
 const maxImportBytes = 1024 * 1024;
 
@@ -53,9 +54,10 @@ class ConfigurationImporter {
                 'bind-address',
                 'external-controller',
                 'log-level',
+                'dns',
               }.contains(k),
             ),
-        '配置包含尚未支持的顶层字段；DNS、TUN、provider、Geo 资源及其他内核选项尚未开放',
+        '配置包含尚未支持的顶层字段；TUN、provider、Geo 资源及其他内核选项尚未开放',
       );
       final proxies = (yaml as Map)['proxies'];
       requireConfig(
@@ -297,6 +299,9 @@ class ConfigurationImporter {
       requireConfig(groups.isEmpty, '包含策略组的配置必须提供显式 rules/MATCH');
     }
     final result = base.copyWith(
+      dns: document.containsKey('dns')
+          ? DnsOptions.fromJson(document['dns'])
+          : const DnsOptions.system(),
       groups: groups,
       rules: rules,
       mode: mode,
@@ -313,37 +318,16 @@ class ConfigurationImporter {
         .where((s) => s.isNotEmpty)
         .toList();
     final nodes = <ProxyNode>[];
+    requireConfig(lines.length <= 256, '节点列表不能超过 256 个节点');
     for (var i = 0; i < lines.length; i++) {
-      final uri = Uri.tryParse(lines[i]);
-      requireConfig(
-        uri != null && ['http', 'socks5'].contains(uri.scheme),
-        '第 ${i + 1} 行协议不受支持（仅 HTTP/SOCKS5）',
-      );
-      requireConfig(
-        !uri!.hasQuery &&
-            (uri.path.isEmpty || uri.path == '/') &&
-            RegExp(r'^\w+://[^/?#]*:\d+(?:[/?#]|$)').hasMatch(lines[i]),
-        '第 ${i + 1} 行须有显式端口；路径和额外参数尚未支持',
-      );
-      String? username, password;
-      if (uri.userInfo.isNotEmpty) {
-        final separator = uri.userInfo.indexOf(':');
-        requireConfig(separator > 0, '第 ${i + 1} 行认证需同时提供用户名和密码');
-        username = Uri.decodeComponent(uri.userInfo.substring(0, separator));
-        password = Uri.decodeComponent(uri.userInfo.substring(separator + 1));
+      try {
+        nodes.add(parseShareLink(lines[i]));
+      } on ConfigurationException catch (e) {
+        throw ConfigurationException('第 ${i + 1} 行：${e.message}');
+      } catch (_) {
+        // URI errors can contain the complete link, including credentials.
+        throw ConfigurationException('第 ${i + 1} 行：节点链接语法或编码无效');
       }
-      nodes.add(
-        ProxyNode(
-          id: const Uuid().v4(),
-          displayName: uri.fragment.isEmpty
-              ? '${uri.host}:${uri.port}'
-              : Uri.decodeComponent(uri.fragment),
-          protocol: NodeProtocol.values.byName(uri.scheme),
-          server: uri.host,
-          port: uri.port,
-          options: NodeOptions(username: username, password: password),
-        ),
-      );
     }
     return _nodeProfile(nodes, name);
   }
@@ -431,6 +415,7 @@ class ConfigurationImporter {
       displayName: old.name,
       revision: old.profile.revision + 1,
       mode: parsed.mode,
+      dns: parsed.dns,
       finalTargetId: target(parsed.finalTargetId),
       groups: groups,
       nodes: parsed.nodes

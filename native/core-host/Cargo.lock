@@ -2583,7 +2583,6 @@ dependencies = [
 [[package]]
 name = "vp-dns"
 version = "1.1.0"
-source = "git+https://github.com/mateo-ki/vp_core?rev=fa3e7430371930c440ffb1bdccc6869c63554a34#fa3e7430371930c440ffb1bdccc6869c63554a34"
 dependencies = [
  "bytes",
  "httparse",

@@ -1,0 +1,23 @@
+[package]
+name = "vp-dns"
+description = "DNS 客户端（UDP/TCP）与缓存"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+vp-common.workspace = true
+vp-rule.workspace = true
+vp-config.workspace = true
+serde_yaml.workspace = true
+tokio-rustls.workspace = true
+webpki-roots.workspace = true
+httparse.workspace = true
+tokio.workspace = true
+bytes.workspace = true
+rand.workspace = true
+tracing.workspace = true
+
+[dev-dependencies]
+rcgen.workspace = true

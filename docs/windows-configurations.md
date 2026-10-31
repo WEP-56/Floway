@@ -18,9 +18,9 @@
 | --- | --- |
 | flvp-profile v1 JSON | 保留当前 typed schema 支持的模式、节点、规则与最终策略 |
 | Clash YAML/JSON | 九种协议严格子集；select / 非惰性 url-test / fallback 分组与基础规则，详见最新增量 |
-| HTTP/SOCKS5 URI 每行一条，或对应 Base64 | 要求显式端口；支持百分号编码的用户名/密码；不支持 query 或路径参数；IPv6 地址可解析 |
+| HTTP/SOCKS5、VLESS、Trojan、Hysteria2 / hy2 URI 每行一条，或对应 Base64 | 要求显式端口；认证、TLS/Reality、WS 按协议白名单处理；详见分享链接增量 |
 | 手动单节点 | 无认证 HTTP/SOCKS5，默认最终 MATCH → PROXY，自动选中新节点 |
-| 超出已实现子集的 Clash / Sing-box / V2Ray | 明确拒绝，不静默裁剪 DNS、Geo、provider 或未实现分组参数 |
+| 超出已实现子集的 Clash / Sing-box / V2Ray | 明确拒绝，不静默裁剪 Geo、provider、Fake-IP 或未实现参数；DNS 已开放严格普通代理子集 |
 
 节点列表默认最终策略 PROXY；完整原生 Profile 尊重其规则。导入不能设置本机监听、系统代理、路径或控制端口。远程下载使用 `clash.meta` User-Agent 请求 Clash 格式，显式直连，TLS 默认校验；总超时 20 秒、连接 10 秒、正文 1 MiB（流式累计限制）。当前拒绝重定向并要求最终 URL，不执行 provider 下载。最多 64 份来源、仓库 16 MiB、每份 256 节点/4095 规则，运行配置仍限制 512 KiB。
 
@@ -76,6 +76,15 @@ WS 仅支持 path/headers，拒绝控制字符、重复 header、保留握手字
 最后一次抽样失败分类：A 的 Hysteria2 为 15 秒总超时，其余 6 个为客户端 TLS 握手失败；B 的 Trojan 为 HTTP 代理异常。未捕获到 `CERTIFICATE_VERIFY_FAILED`，尚不能定位为证书信任问题或某一内核协议缺陷。下一阶段应补充脱敏的宿主握手阶段诊断，再验证真实公网请求。
 
 
+## 分享链接导入增量（2026-10-30）
+
+节点列表导入现支持单行/多行及 Base64 的 HTTP、SOCKS5、VLESS、Trojan、Hysteria2 / `hy2` 链接。VLESS 映射 TCP/WS、TLS/Reality、SNI、ALPN、Vision、WebSocket Host/path；Trojan 支持 TLS/SNI、TCP/WS；Hysteria2 支持密码、SNI 和证书校验开关。所有字段进入已有 typed `NodeOptions` 和节点身份哈希，仍由 compiler 与 Rust eager outbound preflight 校验。
+
+链接不等于完整配置：默认最终规则仍是 `MATCH,PROXY`，组/规则不会从链接臆造。未知 query、重复参数、重复/缺少凭据、无端口、路径伪装、gRPC、Hysteria2 ports/mport/obfs、Reality 非 chrome 指纹等拒绝整份导入；错误只给行号与脱敏诊断。Base64 使用现有同一字节上限。导入、刷新失败回滚沿用配置仓库事务。
+
+验证新增：确定性解析/序列化/编译测试覆盖 VLESS Reality+Vision 与 WS、Trojan、Hysteria2 IPv6/别名、认证百分号编码和 padded/unpadded Base64；拒绝矩阵覆盖未知/歧义/损坏参数与凭据脱敏。真实 Windows host 对四种新 schema 完成 eager preflight；本地 VLESS v0 独立 peer 验证真实协议 UUID、目标域名和 HTTP 正文，并覆盖远程 Base64 导入、改名刷新保留 UUID/选择、非法刷新保留运行配置、重启后持久化选择与再次转发。公网订阅尚未用这些分享链接重新验收，不能据此宣称真实订阅全量导入成功。
+
+
 ## 策略组与规则增量（2026-10-30，最新）
 
 - 新增 `PolicyGroup` typed schema，支持 `select`、`url-test`、`fallback`，每 Profile 最多 64 组、每组最多 320 成员、嵌套深度 16。UUID 引用节点/组，禁止重名、重复成员、循环、缺失引用与引用保留全局选择器。宿主有独立边界校验，预检失败不停止工作中的旧实例。
@@ -92,3 +101,9 @@ WS 仅支持 path/headers，拒绝控制字符、重复 header、保留握手字
 为排除 Dart TLS 客户端影响，在同一 Windows 宿主抽样节点上加入独立 `curl.exe`（证书校验保持开启）复验：订阅 A 的 **Hysteria、AnyTLS、Shadowsocks 各一个样本 HTTPS 成功**（目标返回 200 且含预期正文），8 个样本合计 3 个成功。HTTP 样本 curl 进程成功但响应未满足验收，Hysteria2 超时，VMess/VLESS TLS 握手失败，B Trojan 代理连接失败。原 Dart 路径依旧 0/8，其原因未定位；不能继续用该结果代表所有出站不可用。此为抽样，不能推断同协议全部节点。
 
 两份真实订阅依旧不能直接完整导入：A/B 均还有 Geo 和未知顶层语义，A 含 lazy 组与指纹问题；B 另含 DNS、load-balance、Hysteria2 端口跳跃等。后续优先明确内核升级/适配边界，补齐完整语义，不删除用户订阅字段绕过。
+
+## Windows 普通代理 DNS 增量（2026-10-30）
+
+参考 vpn-parser 的 vp_core 编译器、FlClash typed DNS 模型与固定内核实际调用链，实现 Profile 级 `DnsOptions`、严格上游/过滤模型、导入/更新/持久化、确定性编译和宿主独立校验。支持 UDP/TCP IPv4、DoT IPv4、DoH，以及非 Geo fallback-filter 的 CIDR/后缀语义；不修改系统 DNS，不开 53 listener。细节和参考依据见 [DNS 兼容范围](dns-compatibility.md)。补丁 P002 给 DoT connect/TLS/read 统一 3 秒总期限，固定内核版本不变。
+
+Fake-IP、listen、respect-rules、default-nameserver、policy、IPv6 查询及 Geo 过滤继续拒绝，不能把普通 resolver 增量当作完整订阅兼容。真实 Windows 测试覆盖节点 bootstrap、DIRECT UDP/TCP、NXDOMAIN/CIDR/域名 fallback、更新失败保留旧 revision、宿主独立拒绝、DoT 握手超时回退、重启后持久化。完整验证结果见验证记录最新段落。

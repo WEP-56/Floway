@@ -173,7 +173,7 @@ class _FlvpImportSubModalState extends State<FlvpImportSubModal> {
             ),
           ],
           Text(
-            _kind == 'manual' ? '当前支持无认证 HTTP / SOCKS5。默认通过此节点代理。' : '支持 flvp-profile v1、Clash proxies 节点列表及 HTTP/SOCKS5 链接列表（含 Base64）。文件保存为应用内快照。节点列表支持认证 HTTP/SOCKS5、SS、VMess、VLESS、Trojan、AnyTLS、Hysteria 1/2；参数按内核能力校验。支持 select 与非惰性 URL-Test/Fallback 策略组、基础规则；DNS、Geo、provider 尚未支持。订阅监听端口和控制接口不会覆盖本机设置。',
+            _kind == 'manual' ? '当前支持无认证 HTTP / SOCKS5。默认通过此节点代理。' : '支持 flvp-profile v1、Clash 配置及 HTTP/SOCKS5、VLESS、Trojan、Hysteria2 分享链接列表（含 Base64）。文件保存为应用内快照。Clash 节点另支持 SS、VMess、AnyTLS、Hysteria 1；参数按内核能力校验。支持 select 与非惰性 URL-Test/Fallback、基础规则及 redir-host DNS 上游/fallback；Fake-IP、Geo、provider 尚未支持。未知字段会拒绝整份导入；订阅不会覆盖本机监听和系统 DNS 设置。',
             style: flvpText(12, weight: FontWeight.w400, color: colors.ink3),
           ),
           if (_error != null)
