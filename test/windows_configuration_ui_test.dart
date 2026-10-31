@@ -57,7 +57,7 @@ void main() {
       await tester.tap(tun);
       await tester.pump();
       expect(store.settings.tunMode, isFalse);
-      expect(store.toast?.message, contains('尚未实现'));
+      expect(store.toast?.message, contains('TUN'));
       expect(tester.takeException(), isNull);
       await tester.tap(find.byKey(const ValueKey('nav-subs')));
       await tester.pump(const Duration(milliseconds: 600));

@@ -7,6 +7,7 @@ import 'bridge.dart';
 import 'compiler.dart';
 import 'configuration_library.dart';
 import 'configuration_importer.dart';
+import 'elevated_host.dart';
 
 import 'package:path/path.dart' as p;
 import 'package:uuid/uuid.dart';
@@ -65,6 +66,16 @@ class ClientController extends ChangeNotifier {
         selectedNodeId = directTarget;
       }
       library = await store.loadLibrary();
+      // 上次退出时 TUN 仍开启：先连上协助进程，否则宿主会拒绝含 tun 的快照。
+      if (profile.tun.enabled && Platform.isWindows) {
+        try {
+          await HelperClient.ensureRunning(defaultHostExecutable());
+          await bridge.switchTransport(ElevatedHostTransport());
+        } catch (exception) {
+          profile = profile.copyWith(tun: profile.tun.copyWith(enabled: false));
+          error = 'TUN 未能恢复（${exception.toString()}），已回退为普通代理';
+        }
+      }
       await bridge.initialize();
       _desiredRunning = bridge.status.running;
       if (await store.hasPending()) {
@@ -174,7 +185,62 @@ class ClientController extends ChangeNotifier {
     });
   }
 
+  bool get tunEnabled => profile.tun.enabled;
+
+  /// 开启/关闭 TUN。首次开启会安装管理员协助进程（一次 UAC），
+  /// 之后走常驻进程静默连接；TUN 与系统代理互斥。
+  Future<void> setTun(bool enabled) async {
+    await _execute(() async {
+      if (enabled == profile.tun.enabled && bridge.status.running) {
+        return;
+      }
+      if (enabled) {
+        await HelperClient.ensureRunning(defaultHostExecutable());
+        await bridge.switchTransport(ElevatedHostTransport());
+      } else {
+        await bridge.switchTransport(
+          WindowsHostTransport(supportDirectory: store.root.path),
+        );
+      }
+      await bridge.initialize();
+      final next = profile.copyWith(
+        tun: profile.tun.copyWith(enabled: enabled, autoRoute: enabled),
+      );
+      profile = next;
+      await store.saveClientState(
+        next,
+        mixedPort,
+        selectedNodeId ?? directTarget,
+        library: library,
+      );
+      if (!_desiredRunning) return;
+      final config = compiler.compile(
+        next,
+        mixedPort: mixedPort,
+        selectedNodeId: selectedNodeId,
+      );
+      final snapshot = await store.stage(
+        config,
+        profile: next,
+        selectedNodeId: selectedNodeId,
+        library: library,
+      );
+      await store.beginApply(snapshot, bridge.status.appliedRevision);
+      transition = CoreState.starting;
+      _notify();
+      await bridge.start(snapshot);
+      await store.commit(
+        bridge.status.appliedRevision,
+        bridge.status.configHash!,
+      );
+    });
+    if (error != null) throw StateError(error!);
+  }
+
   Future<void> setSystemProxy(bool enabled) async {
+    if (enabled && profile.tun.enabled) {
+      throw StateError('TUN 与系统代理互斥，请先关闭 TUN');
+    }
     await _execute(() async {
       if (!bridge.status.running && enabled) {
         throw const CoreFailure('NOT_RUNNING', '请先启动本地代理', null);

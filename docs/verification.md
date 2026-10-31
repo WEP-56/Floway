@@ -143,3 +143,13 @@ python tools/verify_research.py --docs-only
 剩余字段级警告（不影响导入）：ipv6、unified-delay、tcp-concurrent、profile 尚未接入；client-fingerprint 仅在 Reality 下生效；ws-opts 的 max-early-data / early-data-header-name 暂不支持；非 ASCII 或非法 sni 已被忽略；lazy 按立即测速处理。
 
 验证方式：临时测试脚本读取订阅文本，调用 ConfigurationImporter.parse(warnings)、ConfigCompiler.compile，再把编译结果交给 native/core-host 的 start 操作；脚本与订阅文本仅存放于 .artifacts（已 gitignore），未提交。PowerShell 向宿主管道传递时需设 $OutputEncoding 为 UTF-8，否则非 ASCII 节点名会导致哈希校验失败。
+## TUN 与管理员协助进程（2026-10-31）
+
+- 宿主：`native/core-host/src/elevation.rs` 新增管理员协助进程（常驻回环 TCP，端口 38765，令牌来自 `%ProgramData%\FLVPcore\token`）。`flvp-core-host --elevated-serve` 未提权时直接退出并提示“协助进程需要管理员权限”，已实测退出码 1。
+- 计划任务模型对齐 FlClash Helper 的用户体验：`schtasks /Create /SC ONSTART /RU SYSTEM /RL HIGHEST /TR "<exe> --elevated-serve"`，首次安装弹一次 UAC，之后开机常驻、应用静默连接。
+- 配置：`tun` 顶层字段从“一律拒绝”改为白名单解析。内核支持的 `enable/auto-route/address/netmask/mtu/fake-ip-range/ring-capacity/auto-redirect` 透传；`stack/dns-hijack/auto-detect-interface/strict-route/device/gso/udp-timeout/endpoint-independent-nat` 记字段级警告后忽略；其余未知字段显式报错并指出字段名。
+- 非提权宿主收到 `tun.enable=true` 的快照返回 `TUN_REQUIRES_ADMIN`，不会静默降级为普通代理。
+- 互斥：TUN 运行中调用 `enableSystemProxy` 返回 `SYSTEM_PROXY_CONFLICT`；`start/apply` 在 TUN 配置下不再恢复系统代理。
+- Dart：新增 `TunOptions`（tun_options.dart，随 Profile 序列化）、导入器按字段降级、编译器输出真实 tun 段；`elevated_host.dart` 提供计划任务安装/卸载、令牌读取、`ElevatedHostTransport`（回环 TCP + hello 鉴权）；`ClientController.setTun` 负责切换宿主、重建快照，启动时若上次 TUN 开启会自动重连协助进程，连不上则回退普通代理并提示。
+- 校验：`cargo test --lib` 13 项通过（含 tun 白名单、未知字段报错、`TUN_REQUIRES_ADMIN`）；`flutter analyze` 无问题；`flutter test` 80 项通过（新增 test/tun_options_test.dart 4 项）。
+- 未完成：Wintun 组件安装与真实流量转发需在用户机器实测；TUN 下的路由/DNS 事务恢复依赖内核 vp-tun 的 auto_route，本轮未额外做宿主级快照；卸载协助进程入口（HelperClient.uninstall）尚未接到 UI。

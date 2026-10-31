@@ -5,6 +5,9 @@ use flvp_host::{Host, MAX_REQUEST_BYTES, init_logging};
 fn main() -> io::Result<()> {
     init_logging();
     let mut host = Host::default();
+    if std::env::args().nth(1).as_deref() == Some("--elevated-serve") {
+        return flvp_host::elevation::serve(&mut host);
+    }
     if std::env::args().nth(1).as_deref() == Some("--recover-system-proxy") {
         let response = host.request(r#"{"requestId":"recovery","operation":"capabilities"}"#);
         if !response["result"]["systemProxyRecoveryError"].is_null() {

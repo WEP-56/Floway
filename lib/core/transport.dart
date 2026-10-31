@@ -17,18 +17,17 @@ class HostTransportException implements Exception {
   String toString() => message;
 }
 
+/// 默认宿主二进制路径；TUN 切换协助进程时也用它。
+String defaultHostExecutable() =>
+    Platform.environment['FLVP_CORE_HOST'] ??
+    p.join(File(Platform.resolvedExecutable).parent.path, 'flvp-core-host.exe');
+
 class WindowsHostTransport implements HostTransport {
   WindowsHostTransport({
     String? executable,
     this.supportDirectory,
     this.timeout = const Duration(seconds: 35),
-  }) : executable =
-           executable ??
-           Platform.environment['FLVP_CORE_HOST'] ??
-           p.join(
-             File(Platform.resolvedExecutable).parent.path,
-             'flvp-core-host.exe',
-           );
+  }) : executable = executable ?? defaultHostExecutable();
 
   final String executable;
   final String? supportDirectory;

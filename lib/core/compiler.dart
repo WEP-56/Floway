@@ -90,7 +90,7 @@ class ConfigCompiler {
       'log-level': 'warn',
       'ipv6': false,
       'dns': profile.dns.toRuntimeJson(),
-      'tun': {'enable': false, 'auto-route': false},
+      'tun': profile.tun.toRuntimeJson(),
       'proxies': [
         for (final node in profile.nodes)
           {

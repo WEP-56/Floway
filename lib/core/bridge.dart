@@ -67,9 +67,19 @@ class CoreFailure implements Exception {
 
 class CoreBridge {
   CoreBridge(this.transport);
-  final HostTransport transport;
+  HostTransport transport;
   CoreStatus status = const CoreStatus();
   Map<String, dynamic>? capabilities;
+
+  /// TUN 需要切换到管理员协助进程，切换后旧连接与状态都作废。
+  Future<void> switchTransport(HostTransport next) async {
+    if (identical(next, transport)) return;
+    final previous = transport;
+    transport = next;
+    status = const CoreStatus();
+    capabilities = null;
+    await previous.close();
+  }
 
   Future<Map<String, dynamic>> _request(
     String operation, [

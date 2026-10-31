@@ -55,6 +55,7 @@ class ConfigurationImporter {
         'external-controller',
         'log-level',
         'dns',
+        'tun',
         'rule-providers',
       };
       for (final key in (yaml as Map).keys) {
@@ -471,6 +472,7 @@ class ConfigurationImporter {
     }
     final result = base.copyWith(
       dns: _dnsFrom(document['dns'], warnings),
+      tun: TunOptions.fromClash(document['tun'], warn: warnings?.add),
       groups: groups,
       rules: rules,
       mode: mode,
@@ -621,6 +623,7 @@ class ConfigurationImporter {
       revision: old.profile.revision + 1,
       mode: parsed.mode,
       dns: parsed.dns,
+      tun: parsed.tun,
       finalTargetId: target(parsed.finalTargetId),
       groups: groups,
       nodes: parsed.nodes

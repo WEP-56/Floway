@@ -330,3 +330,10 @@ Windows only / 无迁移 / 固定内核且无自动更新继续生效。已扩�
 - 上限：节点 1024、规则 8192、策略组成员 1024、配置 1 MiB（Dart 与宿主同步）。
 - 回归：用户两份自建订阅均 100% 导入并启动成功（51/51、6/6 节点）；详见 docs/verification.md。
 - 待办：ipv6、unified-delay、tcp-concurrent、profile 等顶层字段仍未接入；TUN 仍未实现。
+## 20. TUN 与管理员协助进程（2026-10-31）
+
+- 新增 native/core-host/src/elevation.rs：`--elevated-serve` 回环 TCP 常驻服务、`%ProgramData%\FLVPcore\{token,endpoint.json}`、hello 令牌鉴权、仅回环对端；未提权启动直接报错退出（实测 exit=1）。
+- config.rs：`Tun` 改为赦免式结构（flatten 收集未知键）。内核字段透传，常见但未实现的字段记警告忽略，未知字段报错。`PreparedConfig` 增加 tun_enabled/tun_auto_route/warnings；新增 `Rejected{code,message}`，非提权遇 tun 返回 TUN_REQUIRES_ADMIN。
+- lib.rs：capabilities 暴露 tun/elevated/tunHelperPort/tunInstallable；status 携带 tunEnabled/tunAutoRoute/configWarnings；TUN 与系统代理互斥。
+- Dart：tun_options.dart（Profile.tun）、configuration_importer 解析、compiler 输出、elevated_host.dart（计划任务安装 + ElevatedHostTransport）、CoreBridge.switchTransport、ClientController.setTun 与启动恢复；设置页 TUN 开关接到真实流程。
+- 待办：Wintun 安装器/卸载、宿主级路由与 DNS 事务快照、UI 卸载协助进程、安卓 VpnService。

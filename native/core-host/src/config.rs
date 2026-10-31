@@ -10,6 +10,29 @@ pub struct PreparedConfig {
     pub hash: String,
     pub revision: u64,
     pub port: u16,
+    pub tun_enabled: bool,
+    pub tun_auto_route: bool,
+    pub warnings: Vec<String>,
+}
+
+/// 配置被拒绝时携带的错误码，便于调用方区分「需要管理员」与其他拒绝。
+pub struct Rejected {
+    pub code: &'static str,
+    pub message: String,
+}
+
+impl Rejected {
+    fn config(message: String) -> Self {
+        Self { code: "CONFIG_REJECTED", message }
+    }
+}
+
+#[derive(Debug)]
+pub struct Validated {
+    pub port: u16,
+    pub tun_enabled: bool,
+    pub tun_auto_route: bool,
+    pub warnings: Vec<String>,
 }
 
 #[derive(Deserialize)]
@@ -21,20 +44,29 @@ struct Arguments {
 }
 
 impl PreparedConfig {
-    pub fn from_arguments(value: &Value) -> Result<Self, String> {
+    pub fn from_arguments(value: &Value) -> Result<Self, Rejected> {
         let args: Arguments = serde_json::from_value(value.clone())
-            .map_err(|_| "Invalid snapshot arguments".to_owned())?;
+            .map_err(|_| Rejected::config("Invalid snapshot arguments".into()))?;
         let hash = format!("{:x}", Sha256::digest(args.config.as_bytes()));
         if args.revision == 0 || args.config_hash != hash {
-            return Err("Snapshot revision or SHA-256 is invalid".into());
+            return Err(Rejected::config("Snapshot revision or SHA-256 is invalid".into()));
         }
-        let port = validate(&args.config)?;
-        let text = crate::providers::inject(&args.config)?;
+        let validated = validate(&args.config).map_err(Rejected::config)?;
+        if validated.tun_enabled && !crate::elevation::is_elevated() {
+            return Err(Rejected {
+                code: "TUN_REQUIRES_ADMIN",
+                message: "TUN 需要管理员协助进程；请先安装并启动协助进程后重试".into(),
+            });
+        }
+        let text = crate::providers::inject(&args.config).map_err(Rejected::config)?;
         Ok(Self {
             text,
             hash,
             revision: args.revision,
-            port,
+            port: validated.port,
+            tun_enabled: validated.tun_enabled,
+            tun_auto_route: validated.tun_auto_route,
+            warnings: validated.warnings,
         })
     }
 }
@@ -56,10 +88,75 @@ struct OrdinaryConfig {
 }
 
 #[derive(Deserialize)]
-#[serde(rename_all = "kebab-case", deny_unknown_fields)]
+#[serde(rename_all = "kebab-case")]
 struct Tun {
+    #[serde(default)]
     enable: bool,
+    #[serde(default)]
     auto_route: bool,
+    #[serde(default)]
+    address: Option<String>,
+    #[serde(default)]
+    netmask: Option<String>,
+    #[serde(default)]
+    mtu: Option<u16>,
+    #[serde(default)]
+    fake_ip_range: Option<String>,
+    #[serde(default)]
+    ring_capacity: Option<u32>,
+    #[serde(default)]
+    auto_redirect: Option<bool>,
+    #[serde(flatten)]
+    extra: serde_json::Map<String, Value>,
+}
+
+impl Tun {
+    /// 校验 TUN 字段：内核支持的透传，常见但当前无实现的字段降级并提示，
+    /// 未知字段显式报错而不是静默丢弃。
+    fn plan(&self) -> Result<(bool, bool, Vec<String>), String> {
+        let mut warnings = Vec::new();
+        for key in self.extra.keys() {
+            match key.as_str() {
+                "stack"
+                | "dns-hijack"
+                | "auto-detect-interface"
+                | "strict-route"
+                | "device"
+                | "gso"
+                | "udp-timeout"
+                | "endpoint-independent-nat" => {
+                    warnings.push(format!("tun 字段 {key} 暂未接入，已忽略"));
+                }
+                other => return Err(format!("tun 字段 {other} 不受支持")),
+            }
+        }
+        if let Some(mtu) = self.mtu
+            && !(576..=9000).contains(&mtu)
+        {
+            return Err("tun.mtu 超出 576-9000".into());
+        }
+        if let Some(ring) = self.ring_capacity
+            && (!ring.is_power_of_two() || !(131_072..=67_108_864).contains(&ring))
+        {
+            return Err("tun.ring-capacity 必须是 128KiB-64MiB 之间的 2 的幂".into());
+        }
+        if let Some(address) = &self.address {
+            address
+                .parse::<std::net::Ipv4Addr>()
+                .map_err(|_| "tun.address 必须是 IPv4 地址".to_owned())?;
+        }
+        if let Some(netmask) = &self.netmask {
+            netmask
+                .parse::<std::net::Ipv4Addr>()
+                .map_err(|_| "tun.netmask 必须是 IPv4 掩码".to_owned())?;
+        }
+        if let Some(range) = &self.fake_ip_range
+            && !range.contains('/')
+        {
+            return Err("tun.fake-ip-range 必须是 CIDR".into());
+        }
+        Ok((self.enable, self.auto_route, warnings))
+    }
 }
 
 #[derive(Deserialize)]
@@ -213,7 +310,7 @@ fn validate_groups(cfg: &OrdinaryConfig) -> Result<(), String> {
     Ok(())
 }
 
-pub fn validate(text: &str) -> Result<u16, String> {
+pub fn validate(text: &str) -> Result<Validated, String> {
     if text.len() > 1024 * 1024 {
         return Err("Runtime configuration exceeds 1 MiB".into());
     }
@@ -225,12 +322,11 @@ pub fn validate(text: &str) -> Result<u16, String> {
         || cfg.mode != "rule"
         || cfg.log_level != "warn"
         || cfg.ipv6
-        || cfg.tun.enable
-        || cfg.tun.auto_route
     {
         return Err("Only loopback ordinary proxy mode is available in this build".into());
     }
     cfg.dns.validate()?;
+    let (tun_enabled, tun_auto_route, mut warnings) = cfg.tun.plan()?;
     if cfg.proxies.len() > 1024 || cfg.rules.len() > 8192 {
         return Err("Configuration exceeds this milestone's resource limits".into());
     }
@@ -344,7 +440,12 @@ pub fn validate(text: &str) -> Result<u16, String> {
         },
     )
     .map_err(|errors| format!("Strict rule compilation failed: {}", errors.join("; ")))?;
-    Ok(cfg.mixed_port)
+    Ok(Validated {
+        port: cfg.mixed_port,
+        tun_enabled,
+        tun_auto_route,
+        warnings,
+    })
 }
 
 fn load_providers() -> Result<HashMap<String, (vp_rule::provider::Behavior, String)>, String> {

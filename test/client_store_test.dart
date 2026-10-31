@@ -114,10 +114,11 @@ void main() {
     () async {
       store.setSettings((s) => s.copyWith(systemProxy: true));
       expect(store.settings.systemProxy, isFalse);
+      // 普通宿主没有管理员协助进程：TUN 开关必须被拒绝而不是伪造成功。
       store.setSettings((s) => s.copyWith(tunMode: true));
       expect(store.settings.tunMode, isFalse);
       expect(store.subs, isEmpty);
-      expect(store.toast!.message, contains('尚未实现'));
+      expect(store.toast!.message, contains('TUN'));
       expect(host.operations, ['capabilities', 'status']);
     },
   );

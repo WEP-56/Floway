@@ -3,6 +3,7 @@
 
 mod config;
 mod dns;
+pub mod elevation;
 mod geo;
 mod node_options;
 mod providers;
@@ -195,7 +196,11 @@ impl Host {
                     "hostVersion": env!("CARGO_PKG_VERSION"),
                     "coreBuildId": format!("{CORE_COMMIT}/flvp-host-{}+P001+P002", env!("CARGO_PKG_VERSION")),
                     "patches": ["P001-http-authority", "P002-dot-deadline"],
-                    "ordinaryProxy": true, "vpn": false, "tun": false,
+                    "ordinaryProxy": true, "vpn": false,
+                    "tun": cfg!(target_os = "windows") && elevation::is_elevated(),
+                    "elevated": elevation::is_elevated(),
+                    "tunHelperPort": elevation::HELPER_PORT,
+                    "tunInstallable": cfg!(target_os = "windows"),
                     "systemProxy": cfg!(target_os = "windows") && self.network_lock.is_some(), "subscriptionImport": false,
                     "systemProxyRecoveryError": self.network_recovery_error,
                     "hotReload": false, "applyStrategy": "restart-with-rollback",
@@ -229,6 +234,13 @@ impl Host {
                     ));
                 };
                 let port = running.config.port;
+                if running.config.tun_enabled {
+                    return Err((
+                        "SYSTEM_PROXY_CONFLICT",
+                        "TUN 与系统代理互斥，请先关闭 TUN 再开启系统代理".into(),
+                        None,
+                    ));
+                }
                 if !socks_ready(port) {
                     return Err((
                         "LISTENER_NOT_READY",
@@ -259,7 +271,7 @@ impl Host {
             }
             "start" | "apply" => {
                 let config = PreparedConfig::from_arguments(&req.arguments)
-                    .map_err(|e| ("CONFIG_REJECTED", e, None))?;
+                    .map_err(|e| (e.code, e.message, None))?;
                 if req.operation == "start" && self.running.is_some() {
                     return Err(("ALREADY_RUNNING", "Core is already running".into(), None));
                 }
@@ -272,7 +284,8 @@ impl Host {
                     }
                 }
                 let root = app_support_root();
-                let reenable = self.network_lock.is_some()
+                let reenable = !config.tun_enabled
+                    && self.network_lock.is_some()
                     && root.as_deref().is_some_and(system_proxy::is_active);
                 if self.network_lock.is_some()
                     && let Some(root) = &root
@@ -359,13 +372,16 @@ impl Host {
                 "mixedPort": running.config.port, "upload": stats.upload,
                 "download": stats.download, "connections": running.app.conns.list().len(),
                 "selected": selected, "systemProxy": system_proxy,
+                "tunEnabled": running.config.tun_enabled, "tunAutoRoute": running.config.tun_auto_route,
+                "configWarnings": running.config.warnings,
                 "systemProxyRecoveryError": self.network_recovery_error})
         } else {
             json!({"state": if self.failed {"failed"} else {"stopped"},
                 "generation": self.generation, "appliedRevision": 0,
                 "configHash": null, "mixedPort": null,
                 "upload": 0, "download": 0, "connections": 0, "selected": null,
-                "systemProxy": system_proxy,
+                "systemProxy": system_proxy, "tunEnabled": false, "tunAutoRoute": false,
+                "configWarnings": Vec::<String>::new(),
                 "systemProxyRecoveryError": self.network_recovery_error})
         }
     }
@@ -589,8 +605,26 @@ mod tests {
     fn refuses_vpn_and_unknown_rules_before_start() {
         let args = arguments(port(), 1);
         let mut config: Value = serde_json::from_str(args["config"].as_str().unwrap()).unwrap();
-        config["tun"]["enable"] = json!(true);
-        assert!(config::validate(&config.to_string()).is_err());
+        config["tun"] = json!({"enable": true, "auto-route": true, "stack": "mixed"});
+        let validated = config::validate(&config.to_string()).unwrap();
+        assert!(validated.tun_enabled && validated.tun_auto_route);
+        assert!(validated.warnings.iter().any(|w| w.contains("stack")));
+        config["tun"] = json!({"enable": true, "unexpected-key": 1});
+        let error = config::validate(&config.to_string()).unwrap_err();
+        assert!(error.contains("unexpected-key"), "{error}");
+        if !elevation::is_elevated() {
+            use sha2::Digest;
+            let mut payload = arguments(port(), 1);
+            let mut tun_config: Value =
+                serde_json::from_str(payload["config"].as_str().unwrap()).unwrap();
+            tun_config["tun"] = json!({"enable": true});
+            let text = tun_config.to_string();
+            payload["configHash"] =
+                json!(format!("{:x}", sha2::Sha256::digest(text.as_bytes())));
+            payload["config"] = json!(text);
+            let rejected = config::PreparedConfig::from_arguments(&payload).err().unwrap();
+            assert_eq!(rejected.code, "TUN_REQUIRES_ADMIN");
+        }
         config["tun"]["enable"] = json!(false);
         config["rules"] = json!(["UNKNOWN,example.org,DIRECT", "MATCH,DIRECT"]);
         assert!(config::validate(&config.to_string()).is_err());

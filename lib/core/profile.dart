@@ -4,6 +4,7 @@ import 'dart:io';
 part 'node_options.dart';
 part 'policy_group.dart';
 part 'dns_options.dart';
+part 'tun_options.dart';
 
 enum RoutingMode { rule, global, direct }
 
@@ -269,6 +270,7 @@ class Profile {
     required List<RuleSpec> rules,
     List<PolicyGroup> groups = const [],
     this.dns = const DnsOptions.system(),
+    this.tun = const TunOptions.disabled(),
     this.revision = 1,
     this.mode = RoutingMode.rule,
     this.finalTargetId = directTarget,
@@ -292,6 +294,7 @@ class Profile {
   final List<RuleSpec> rules;
   final List<PolicyGroup> groups;
   final DnsOptions dns;
+  final TunOptions tun;
 
   Profile copyWith({
     String? displayName,
@@ -299,6 +302,7 @@ class Profile {
     List<RuleSpec>? rules,
     List<PolicyGroup>? groups,
     DnsOptions? dns,
+    TunOptions? tun,
     RoutingMode? mode,
     String? finalTargetId,
   }) => Profile(
@@ -311,10 +315,12 @@ class Profile {
     rules: rules ?? this.rules,
     groups: groups ?? this.groups,
     dns: dns ?? this.dns,
+    tun: tun ?? this.tun,
   );
 
   void validate() {
     dns.validate();
+    tun.validate();
     requireConfig(validId(id), '配置 ID 必须是 UUID');
     requireConfig(
       revision >= 1 && revision <= 0x1fffffffffffff,
@@ -388,6 +394,7 @@ class Profile {
     'rules': rules.map((r) => r.toJson()).toList(),
     'groups': groups.map((g) => g.toJson()).toList(),
     'dns': dns.toJson(),
+    'tun': tun.toJson(),
   };
 
   factory Profile.fromText(String text) {
@@ -407,6 +414,7 @@ class Profile {
       'rules',
       'groups',
       'dns',
+      'tun',
     }, 'profile');
     requireConfig(
       map['format'] == 'flvp-profile' && map['schemaVersion'] == 1,
@@ -435,6 +443,9 @@ class Profile {
       dns: map.containsKey('dns')
           ? DnsOptions.fromJson(map['dns'])
           : const DnsOptions.system(),
+      tun: map.containsKey('tun')
+          ? TunOptions.fromJson(map['tun'])
+          : const TunOptions.disabled(),
     );
     profile.validate();
     return profile;

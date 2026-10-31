@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/services.dart';
@@ -288,6 +289,41 @@ class FlvpClientStore extends FlvpDesignStore {
       notify('$unsupported尚未实现');
       return;
     }
+    if (next.tunMode != before.tunMode) {
+      final caps = controller.bridge.capabilities ?? const <String, dynamic>{};
+      if (next.tunMode &&
+          (!Platform.isWindows ||
+              (caps['tun'] != true && caps['tunInstallable'] != true))) {
+        notify('TUN 需要管理员宿主，当前宿主不支持');
+        return;
+      }
+      unawaited(
+        _enqueue(() async {
+          try {
+            await controller.setTun(next.tunMode);
+            if (!_disposed) {
+              super.setSettings(
+                (s) => s.copyWith(
+                  tunMode: controller.tunEnabled,
+                  systemProxy: controller.status.systemProxy,
+                ),
+              );
+              notify(
+                next.tunMode
+                    ? 'TUN 已开启（首次需在系统弹窗中授权）'
+                    : 'TUN 已关闭，已回到普通代理',
+              );
+            }
+          } catch (error) {
+            if (!_disposed) {
+              super.setSettings((s) => s.copyWith(tunMode: controller.tunEnabled));
+              notify(error.toString());
+            }
+          }
+        }),
+      );
+      return;
+    }
     if (next.systemProxy != before.systemProxy) {
       if (controller.bridge.capabilities?['systemProxy'] != true) {
         notify('系统代理仅支持 Windows');
@@ -332,7 +368,6 @@ class FlvpClientStore extends FlvpDesignStore {
   }
 
   String? _unsupportedChange(AppSettings a, AppSettings b) {
-    if (a.tunMode != b.tunMode) return 'TUN / VPN';
     if (a.allowLan != b.allowLan) return '局域网监听';
     if (a.socksPort != b.socksPort) return '独立 SOCKS 端口（请使用混合端口）';
     if (a.dns != b.dns ||
