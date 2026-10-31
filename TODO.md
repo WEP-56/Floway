@@ -372,3 +372,4 @@ Windows 侧边栏与 Android 底栏统一为五个主入口：**仪表盘 / 代�
 - 配置页动作接入上游：添加（importSub 转 addProfileFromLink）、删除（removeSub 转 deleteProfile）、全部更新（refreshAllSubs 转 autoUpdateProfiles）。
 - 静态分析：flutter analyze --no-pub lib 无问题。
 - 本批次余下：代理页策略组与节点（PROXY-01～10）、配置页编辑与自定义工作区（PROFILE-13～16）。
+- 交接文档见仓库根 handoff.md（现状、接线方式、上游入口、环境坑与下一步）。
