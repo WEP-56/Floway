@@ -95,7 +95,10 @@ class _FlvpMobileShellState extends State<FlvpMobileShell> {
     final toast = store.toast;
     final statusHeight = widget.mock ? 44.0 : padding.top;
     final bottomInset = widget.mock ? 0.0 : padding.bottom;
-    final navHeight = 80 + (bottomInset > 6 ? bottomInset : 6.0);
+    // 悬浮 dock：与屏幕边缘留出间距，内容从它下面穿过去。
+    const dockHeight = 64.0;
+    final dockBottom = 10 + (bottomInset > 0 ? bottomInset : 8.0);
+    final dockTop = dockBottom + dockHeight;
     return FlvpModalHost(
       key: _host,
       child: LayoutBuilder(
@@ -117,7 +120,7 @@ class _FlvpMobileShellState extends State<FlvpMobileShell> {
                         else
                           SizedBox(height: statusHeight),
                         SizedBox(
-                          height: 56,
+                          height: 48,
                           child: Padding(
                             padding: const EdgeInsets.only(left: 20, right: 8),
                             child: Row(
@@ -125,14 +128,16 @@ class _FlvpMobileShellState extends State<FlvpMobileShell> {
                                 AnimatedSlide(
                                   duration: FlvpMotion.shape,
                                   curve: FlvpMotion.easeEmph,
-                                  offset: collapsed ? Offset.zero : const Offset(0, 8 / 19),
+                                  offset: collapsed
+                                      ? Offset.zero
+                                      : const Offset(0, 8 / 17),
                                   child: AnimatedOpacity(
                                     duration: FlvpMotion.shape,
                                     curve: FlvpMotion.easeEmph,
                                     opacity: collapsed ? 1 : 0,
                                     child: Text(
                                       flvpPageTitles[_page]!,
-                                      style: flvpText(19, color: colors.ink),
+                                      style: flvpText(17, color: colors.ink),
                                     ),
                                   ),
                                 ),
@@ -140,7 +145,7 @@ class _FlvpMobileShellState extends State<FlvpMobileShell> {
                                 if (_page == FlvpPageKey.proxies)
                                   FlvpIconButton(
                                     label: '测试延迟',
-                                    dimension: 44,
+                                    dimension: 40,
                                     onPressed: store.testNodes,
                                     icon: FlvpSpin(
                                       active: store.testing,
@@ -150,7 +155,7 @@ class _FlvpMobileShellState extends State<FlvpMobileShell> {
                                 if (_page == FlvpPageKey.profiles)
                                   FlvpIconButton(
                                     label: '更新全部订阅',
-                                    dimension: 44,
+                                    dimension: 40,
                                     onPressed: store.refreshAllSubs,
                                     icon: const FlvpIcon('RefreshCw', size: 20),
                                   ),
@@ -167,17 +172,22 @@ class _FlvpMobileShellState extends State<FlvpMobileShell> {
                       behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
                       child: SingleChildScrollView(
                         controller: _scroll,
-                        padding: const EdgeInsets.fromLTRB(16, 0, 16, 124),
+                        padding: EdgeInsets.fromLTRB(16, 0, 16, dockTop + 16),
                         child: FlvpPageEntrance(
                           key: ValueKey(_page),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
                               Padding(
-                                padding: const EdgeInsets.fromLTRB(4, 0, 4, 20),
+                                padding: const EdgeInsets.fromLTRB(4, 0, 4, 14),
                                 child: Text(
                                   flvpPageTitles[_page]!,
-                                  style: flvpText(32, height: 1.25, letterSpacing: -0.8, color: colors.ink),
+                                  style: flvpText(
+                                    26,
+                                    height: 1.2,
+                                    letterSpacing: -0.6,
+                                    color: colors.ink,
+                                  ),
                                 ),
                               ),
                               switch (_page) {
@@ -187,7 +197,9 @@ class _FlvpMobileShellState extends State<FlvpMobileShell> {
                                 ),
                                 FlvpPageKey.proxies => const FlvpNodesPage(platform: FlvpPlatform.mobile),
                                 FlvpPageKey.profiles => const FlvpSubscriptionsPage(platform: FlvpPlatform.mobile),
-                                FlvpPageKey.info => const FlvpInfoPage(),
+                                FlvpPageKey.info => const FlvpInfoPage(
+                                  platform: FlvpPlatform.mobile,
+                                ),
                                 FlvpPageKey.settings => FlvpSettingsPage(
                                   platform: FlvpPlatform.mobile,
                                   onNavigate: _go,
@@ -207,50 +219,25 @@ class _FlvpMobileShellState extends State<FlvpMobileShell> {
                   duration: FlvpMotion.fab,
                   curve: FlvpMotion.easeEmph,
                   right: 16,
-                  bottom: (toast != null ? 166 : 100) + bottomInset,
+                  bottom: dockTop + 12 + (toast != null ? 56 + 12 : 0),
                   child: _ExtendedFab(
                     collapsed: _scrollY > 24,
                     onTap: _openImport,
                   ),
                 ),
-              // MD3 navigation bar
+              // 悬浮 dock：圆角、留白、投影，内容从下面穿过
               Positioned(
-                left: 0,
-                right: 0,
-                bottom: 0,
-                child: Container(
-                  height: navHeight,
-                  padding: EdgeInsets.fromLTRB(8, 12, 8, bottomInset),
-                  color: colors.frame,
-                  // Five entries at the design's 76pt do not fit a 360pt phone, so
-                  // the item width shrinks with the bar instead of overflowing.
-                  child: LayoutBuilder(
-                    builder: (context, constraints) {
-                      final width =
-                          (constraints.maxWidth / flvpMobileNavItems.length)
-                              .clamp(0.0, _navItemWidth);
-                      return Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceAround,
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          for (final item in flvpMobileNavItems)
-                            _NavItem(
-                              key: ValueKey('nav-${item.key.name}'),
-                              icon: item.icon,
-                              label: item.label,
-                              // 信息 lives in the settings page on Android, so the
-                              // settings entry stays selected while it is open.
-                              active:
-                                  _page == item.key ||
-                                  (item.key == FlvpPageKey.settings &&
-                                      _page == FlvpPageKey.info),
-                              width: width,
-                              onTap: () => _go(item.key),
-                            ),
-                        ],
-                      );
-                    },
-                  ),
+                left: 12,
+                right: 12,
+                bottom: dockBottom,
+                child: _FloatingDock(
+                  height: dockHeight,
+                  items: flvpMobileNavItems,
+                  isActive: (item) =>
+                      _page == item.key ||
+                      (item.key == FlvpPageKey.settings &&
+                          _page == FlvpPageKey.info),
+                  onTap: (item) => _go(item.key),
                 ),
               ),
               if (widget.mock)
@@ -275,7 +262,7 @@ class _FlvpMobileShellState extends State<FlvpMobileShell> {
                 Positioned(
                   left: 0,
                   right: 0,
-                  bottom: 100 + bottomInset,
+                  bottom: dockTop + 12,
                   child: Center(
                     child: FlvpSnackbar(
                       key: ValueKey(toast.id),
@@ -355,89 +342,111 @@ class _ExtendedFab extends StatelessWidget {
   }
 }
 
-/// The design's navigation item width; narrower bars shrink it to fit.
-const _navItemWidth = 76.0;
+/// 悬浮圆角 dock：与屏幕边缘留白、带投影，四项等宽。
+class _FloatingDock extends StatelessWidget {
+  const _FloatingDock({
+    required this.height,
+    required this.items,
+    required this.isActive,
+    required this.onTap,
+  });
 
-class _NavItem extends StatelessWidget {
-  const _NavItem({
+  final double height;
+  final List<FlvpNavItem> items;
+  final bool Function(FlvpNavItem item) isActive;
+  final ValueChanged<FlvpNavItem> onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = FlvpThemeScope.colorsOf(context);
+    return Container(
+      height: height,
+      padding: const EdgeInsets.symmetric(horizontal: 6),
+      decoration: BoxDecoration(
+        color: colors.dialog,
+        borderRadius: BorderRadius.circular(26),
+        boxShadow: FlvpElevation.float,
+        border: Border.all(color: colors.hair),
+      ),
+      child: Row(
+        children: [
+          for (final item in items)
+            Expanded(
+              child: _DockItem(
+                key: ValueKey('nav-${item.key.name}'),
+                icon: item.icon,
+                label: item.label,
+                active: isActive(item),
+                onTap: () => onTap(item),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DockItem extends StatelessWidget {
+  const _DockItem({
     super.key,
     required this.icon,
     required this.label,
     required this.active,
-    required this.width,
     required this.onTap,
   });
 
   final String icon;
   final String label;
   final bool active;
-  final double width;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     final colors = FlvpThemeScope.colorsOf(context);
-    final pill = width < 64 ? width : 64.0;
-    return FlvpRipple(
-      color: active ? colors.onscontainer : colors.ink,
-      surface: Rect.fromLTWH((width - pill) / 2, 0, pill, 32),
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: onTap,
-        child: Semantics(
-          button: true,
-          selected: active,
-          label: label,
-          child: SizedBox(
-            width: width,
+    return Semantics(
+      button: true,
+      selected: active,
+      label: label,
+      child: FlvpRipple(
+        color: active ? colors.onprimary : colors.ink,
+        borderRadius: BorderRadius.circular(16),
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: onTap,
+          // FlvpRipple 的 Stack 默认 topStart：不给 Center，整块内容会贴在
+          // 槽位左侧，四个图标看起来就不居中了。
+          child: Center(
             child: Column(
               mainAxisSize: MainAxisSize.min,
-              spacing: 4,
+              spacing: 3,
               children: [
-                SizedBox(
-                  width: 64,
-                  height: 32,
-                  child: Stack(
-                    alignment: Alignment.center,
-                    children: [
-                      AnimatedOpacity(
-                        duration: FlvpMotion.shape,
-                        curve: FlvpMotion.easeEmph,
-                        opacity: active ? 1 : 0,
-                        child: AnimatedScale(
-                          duration: FlvpMotion.shape,
-                          curve: FlvpMotion.easeEmph,
-                          scale: 1,
-                          child: AnimatedContainer(
-                            duration: FlvpMotion.shape,
-                            curve: FlvpMotion.easeEmph,
-                            width: active ? 64 : 64 * 0.4,
-                            height: 32,
-                            decoration: BoxDecoration(
-                              color: colors.scontainer,
-                              borderRadius: BorderRadius.circular(999),
-                            ),
-                          ),
-                        ),
-                      ),
-                      FlvpIcon(
-                        icon,
-                        size: 21,
-                        strokeWidth: active ? 2.3 : 1.9,
-                        color: active ? colors.onscontainer : colors.ink2,
-                      ),
-                    ],
-                  ),
+              AnimatedContainer(
+                duration: FlvpMotion.shape,
+                curve: FlvpMotion.easeEmph,
+                width: 46,
+                height: 30,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: active ? colors.primary : const Color(0x00000000),
+                  borderRadius: BorderRadius.circular(11),
                 ),
-                Text(
-                  label,
-                  style: flvpText(
-                    12,
-                    weight: active ? FontWeight.w600 : FontWeight.w500,
-                    color: active ? colors.ink : colors.ink2,
-                  ),
+                child: FlvpIcon(
+                  icon,
+                  size: 19,
+                  strokeWidth: active ? 2.3 : 1.9,
+                  color: active ? colors.onprimary : colors.ink2,
                 ),
-              ],
+              ),
+              Text(
+                label,
+                maxLines: 1,
+                style: flvpText(
+                  10.5,
+                  weight: active ? FontWeight.w600 : FontWeight.w500,
+                  color: active ? colors.primary : colors.ink3,
+                ),
+              ),
+            ],
             ),
           ),
         ),

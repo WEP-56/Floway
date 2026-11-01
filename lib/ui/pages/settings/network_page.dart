@@ -230,25 +230,26 @@ class FlvpNetworkPage extends ConsumerWidget {
                 ),
               ],
             ),
-          FlvpSettingsSection(
-            title: '选项',
-            children: [
-              FlvpSettingsToggle(
-                icon: 'Network',
-                title: 'TUN 模式',
-                subtitle: '虚拟网卡接管全部流量',
-                value: clash.tun.enable,
-                onChanged: (value) => ref
-                    .read(patchClashConfigProvider.notifier)
-                    .update((state) => state.copyWith.tun(enable: value)),
-              ),
-              FlvpSettingsValue(
-                icon: 'Activity',
-                title: '网络栈',
-                value: clash.tun.stack.name,
-                onTap: () => _editStack(context, ref),
-              ),
-              if (_pc)
+          if (_pc)
+            FlvpSettingsSection(
+              title: 'TUN 接管',
+              footer: 'TUN 只在桌面端使用；安卓走 VPN 接管，没有这一层。',
+              children: [
+                FlvpSettingsToggle(
+                  icon: 'Network',
+                  title: 'TUN 模式',
+                  subtitle: '虚拟网卡接管全部流量',
+                  value: clash.tun.enable,
+                  onChanged: (value) => ref
+                      .read(patchClashConfigProvider.notifier)
+                      .update((state) => state.copyWith.tun(enable: value)),
+                ),
+                FlvpSettingsValue(
+                  icon: 'Activity',
+                  title: '网络栈',
+                  value: clash.tun.stack.name,
+                  onTap: () => _editStack(context, ref),
+                ),
                 FlvpSettingsValue(
                   icon: 'Server',
                   title: '出口网卡',
@@ -259,19 +260,20 @@ class FlvpNetworkPage extends ConsumerWidget {
                   },
                   onTap: () => _editInterfaceMode(context, ref),
                 ),
-              if (_pc && clash.interfaceNameMode == InterfaceNameMode.custom)
-                FlvpSettingsValue(
-                  icon: 'Network',
-                  title: '网卡名称',
-                  value: clash.interfaceName.isEmpty ? '未设置' : clash.interfaceName,
-                  onTap: () => _editInterfaceName(context, ref),
-                ),
-            ],
-          ),
-          FlvpSettingsSection(
-            title: 'TUN',
-            footer: '路由地址与排除地址按 CIDR 填写；绕过私有网段可避免接管局域网访问。',
-            children: [
+                if (clash.interfaceNameMode == InterfaceNameMode.custom)
+                  FlvpSettingsValue(
+                    icon: 'Network',
+                    title: '网卡名称',
+                    value: clash.interfaceName.isEmpty ? '未设置' : clash.interfaceName,
+                    onTap: () => _editInterfaceName(context, ref),
+                  ),
+              ],
+            ),
+          if (_pc)
+            FlvpSettingsSection(
+              title: 'TUN 路由',
+              footer: '路由地址与排除地址按 CIDR 填写；绕过私有网段可避免接管局域网访问。',
+              children: [
               FlvpSettingsValue(
                 icon: 'Gauge',
                 title: 'MTU',
@@ -391,7 +393,9 @@ class FlvpNetworkPage extends ConsumerWidget {
           Padding(
             padding: const EdgeInsets.only(bottom: 12),
             child: Text(
-              '网络相关的改动会在应用配置后生效；切换 TUN 时系统可能再确认一次网络接管。',
+              _pc
+                  ? '网络相关的改动会在应用配置后生效；切换 TUN 时系统可能再确认一次网络接管。'
+                  : '网络相关的改动会在应用配置后生效；VPN 权限或绕过规则变化时，系统可能再确认一次网络接管。',
               style: flvpText(12, weight: FontWeight.w400, color: colors.ink3),
             ),
           ),

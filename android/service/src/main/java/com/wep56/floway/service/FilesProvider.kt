@@ -19,7 +19,7 @@ class FilesProvider : DocumentsProvider() {
             newRow()
                 .add(DocumentsContract.Root.COLUMN_ROOT_ID, DEFAULT_ROOT_ID)
                 .add(DocumentsContract.Root.COLUMN_FLAGS, DocumentsContract.Root.FLAG_LOCAL_ONLY)
-                .add(DocumentsContract.Root.COLUMN_ICON, R.drawable.ic_service)
+                .add(DocumentsContract.Root.COLUMN_ICON, R.drawable.ic_documents)
                 .add(
                     DocumentsContract.Root.COLUMN_TITLE,
                     context?.getString(CommonR.string.app_name).orEmpty(),

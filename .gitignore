@@ -86,3 +86,10 @@ app.*.map.json
 *.iobj
 *.ipdb
 
+
+# Release signing material and packaging output (never commit these).
+android/local.properties
+android/app/keystore.jks
+android/key.properties
+/dist/
+/env.json

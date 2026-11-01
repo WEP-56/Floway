@@ -1,0 +1,167 @@
+name: release
+
+# Tag 驱动：推送 v* 标签时打包并发布 Release，平时不跑。
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: '要发布的标签（例如 v0.0.1）'
+        required: true
+        type: string
+
+concurrency:
+  group: release-${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+env:
+  FLUTTER_VERSION: '3.47.7'
+  GO_VERSION: '1.27.3'
+  NDK_VERSION: 'r28c'
+
+jobs:
+  android:
+    name: Android APK
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
+          submodules: recursive
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: core/go.sum
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+
+      - name: Setup NDK
+        uses: nttld/setup-ndk@v1
+        id: ndk
+        with:
+          ndk-version: ${{ env.NDK_VERSION }}
+          add-to-path: true
+          link-to-sdk: true
+
+      # 签名材料只来自仓库 Secrets；缺了就明确失败，不产出未签名的 APK。
+      - name: Setup Android signing
+        env:
+          KEYSTORE: ${{ secrets.KEYSTORE }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [ -z "${KEYSTORE:-}" ]; then
+            echo "::error::缺少 KEYSTORE Secret，无法生成签名 APK"
+            exit 1
+          fi
+          echo "$KEYSTORE" | base64 --decode > android/app/keystore.jks
+          {
+            echo "keyAlias=$KEY_ALIAS"
+            echo "storePassword=$STORE_PASSWORD"
+            echo "keyPassword=$KEY_PASSWORD"
+          } >> android/local.properties
+
+      - name: Build
+        env:
+          ANDROID_NDK_HOME: ${{ steps.ndk.outputs.ndk-path }}
+        run: dart setup.dart android --env stable -v
+
+      - name: Upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: artifact-android
+          path: dist
+          overwrite: true
+
+  windows:
+    name: Windows
+    runs-on: windows-2022
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref }}
+          submodules: recursive
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: core/go.sum
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Setup Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            services/helper
+            plugins/rust_api/rust
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          cache: true
+
+      - name: Enable git long paths
+        run: git config --global core.longpaths true
+
+      - name: Build
+        run: dart setup.dart windows --env stable -v
+
+      - name: Upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: artifact-windows
+          path: dist
+          overwrite: true
+
+  release:
+    name: Publish release
+    needs: [android, windows]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          pattern: artifact-*
+          merge-multiple: true
+
+      - name: Checksums
+        run: |
+          cd dist
+          sha256sum ./* > SHA256SUMS
+          ls -lh
+
+      - name: Publish
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+          name: Floway ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+          files: dist/*
+          generate_release_notes: true
+          fail_on_unmatched_files: true

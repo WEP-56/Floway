@@ -6,10 +6,7 @@ import 'package:floway/common/picker.dart';
 import 'package:floway/enum/enum.dart';
 import 'package:floway/models/models.dart';
 import 'package:floway/providers/providers.dart';
-import 'package:floway/views/profiles/custom/custom.dart';
-import 'package:floway/views/profiles/edit.dart';
-import 'package:floway/views/profiles/extend/extend.dart';
-import 'package:floway/views/profiles/preview.dart';
+import 'package:floway/views/profiles/edit.dart' show renameProfile;
 import 'package:floway/views/profiles/profiles.dart'
     show ReorderableProfilesSheet;
 import 'package:flutter/services.dart';
@@ -25,7 +22,12 @@ import '../widgets/controls.dart';
 import '../widgets/data_display.dart';
 import '../widgets/feedback.dart';
 import '../widgets/surfaces.dart';
+import '../widgets/page_scaffold.dart';
 import '../widgets/upstream_page.dart';
+import 'subscriptions/custom_page.dart';
+import 'subscriptions/edit_page.dart';
+import 'subscriptions/extend_page.dart';
+import 'subscriptions/preview_page.dart';
 
 /// pages/Subscriptions.tsx — 配置列表。
 ///
@@ -311,29 +313,37 @@ class _ProfileCardState extends ConsumerState<_ProfileCard> {
   });
 
   void _edit() {
-    if (_profile.type == ProfileType.custom) {
-      unawaited(
-        openFlvpUpstreamPage(
-          context,
-          CustomProfileView(profileId: _profile.id),
-        ),
-      );
-      return;
-    }
     unawaited(
-      openFlvpUpstreamPage(context, EditProfileView(profile: _profile)),
+      pushFlvpPage<void>(
+        context,
+        _profile.type == ProfileType.custom
+            ? FlvpCustomProfilePage(
+                profileId: _profile.id,
+                platform: widget.platform,
+              )
+            : FlvpProfileEditPage(
+                profile: _profile,
+                platform: widget.platform,
+              ),
+      ),
     );
   }
 
   void _extend() {
     unawaited(
-      openFlvpUpstreamPage(context, ExtendView(profileId: _profile.id)),
+      pushFlvpPage<void>(
+        context,
+        FlvpExtendPage(profileId: _profile.id, platform: widget.platform),
+      ),
     );
   }
 
   void _preview() {
     unawaited(
-      openFlvpUpstreamPage(context, PreviewProfileView(profile: _profile)),
+      pushFlvpPage<void>(
+        context,
+        FlvpPreviewPage(platform: widget.platform, profile: _profile),
+      ),
     );
   }
 

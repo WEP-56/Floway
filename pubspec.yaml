@@ -1,7 +1,7 @@
 name: floway
 description: Floway cross-platform proxy client interface (Windows and Android), built on the FlClash runtime.
 publish_to: 'none'
-version: 0.9.2+2026102401
+version: 0.0.1+1
 environment:
   sdk: '>=3.10.0 <4.0.0'
 

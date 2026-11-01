@@ -11,7 +11,7 @@
 - 只保留 Windows 与 Android 的构建、交付及对应界面分支；本轮不设计 Android TV 专用界面。
 - 不增加内核抽象、多内核选择、vp_core 迁移准备、额外防御层、生命周期重构或与本次换前端无关的工程任务。
 - 上游能力的字段、默认值、生效方式与平台归属以源码为准；Floway 只改变呈现与交互组织。
-- 用户原始意见保留在 [前端能力差异.md](前端能力差异.md)，信息页结构参考 [image.png](image.png)。
+
 
 ## 2. 导航决策
 
@@ -418,3 +418,91 @@ Windows 侧边栏与 Android 底栏统一为五个主入口：**仪表盘 / 代�
 底栏：安卓从 5 项改成 4 项 —— 「信息」移进设置页顶部（`信息 → 连接与日志`，通过 `FlvpSettingsPage.onNavigate` 跳转，打开信息时底栏仍高亮「设置」）；`_NavItem` 宽度改成按可用宽度自适应（原来固定 76，5 项在 360dp 上溢出 36px）。桌面侧栏仍是 5 项。
 
 验证：`flutter build apk --debug --target-platform android-x64` 通过；装到模拟器后仪表盘 / 配置 / 设置 / 信息、主题弹层、自定义资源二级页均正常；`flutter analyze --no-pub lib test` 干净；`test/ui` 28 例通过；`flutter build windows --debug` 通过。
+
+### 信息页接上游（2026-11-01）
+
+`lib/ui/pages/info_page.dart` 从骨架改为 `ConsumerStatefulWidget`，四类记录全部接上游真实数据（TODO.md INFO-03 ~ INFO-10）：
+
+- 结构：顶部「运行中 / 实时数据」状态（读 `isStartProvider`）→ 三张概览卡（实时连接 / 最近请求 / 日志记录，点击切标签，口径分别为当前连接数、`requestsProvider` 保留条数、`logsProvider` 保留条数）→ 四标签分段导航（连接 / 请求 / DNS / 日志）→ 搜索框 + 日志等级筛选 chips → 记录列表 → 按标签切换的底部操作。
+- 连接：`coreHandler.getConnections()` 每秒轮询（仅运行中），`TrackerSpeedRanker` 计算上下行速度并按速率排序；关闭全部连接调 `coreHandler.closeConnections()` 后立即刷新。
+- 请求 / DNS / 日志：直接读 `requestsProvider` / `dnsQueriesProvider` / `logsProvider`（请求、DNS、日志按最新在上倒序展示）。搜索按各自 `searchFields` 过滤；日志另有 Error/Warn/Info/Debug/全部等级筛选（只影响当前显示，不改内核日志等级）。
+- 详情：点记录弹 `FlvpModal` 详情（连接/请求保留 `TrackerInfo.metadata` 的地址、规则、代理链、进程等全部字段；DNS 保留答案/错误/基本信息；日志解析 `LogPayload` 路由行），字段可点复制。
+- 标签专属动作（对齐上游原动作）：连接→关闭全部；DNS→清除 DNS 缓存（`clearDnsCache`，独立命名）；日志→导出（`logsProvider.exportLogs`，写临时文件后走系统保存框）。日志「捕获」开关绑定上游 `appSettingProvider.openLogs`，与设置页「日志捕获」同一字段联动；无上游对应捕获开关的连接/请求/DNS 不显示开关。
+- 平台：`FlvpInfoPage` 增加 `platform` 参数，桌面与安卓壳分别传 `pc` / `mobile`；记录行用统一的 Floway 卡片/分隔线/标签样式，不引入 Floway 版式之外的上游 Material 表格。
+
+验证：`flutter analyze --no-pub lib` 与 `--no-pub test` 均无问题；新增 `test/ui/info_page_test.dart`（4 例：概览与默认标签、请求列表、日志等级筛选、DNS 清除缓存入口），`test/ui` 全量 32 例通过；`flutter build windows --debug` 通过。
+
+### 设置二级页 Floway 化（第一批，2026-11-01）
+
+把 4 个原先只套 `FlvpUpstreamPage` 配色、内部仍是上游 Material 组件的二级页改成 Floway 版式，数据与生效方式全部沿用上游：
+
+| 页面 | 新文件 | 上游来源 | 写回的上游状态 |
+| --- | --- | --- | --- |
+| 字体与字号 | `lib/ui/pages/settings/font_page.dart` | `views/font_family.dart` | `themeSettingProvider.fontFamily` / `.textScale` |
+| 附加规则 | `lib/ui/pages/settings/rules_page.dart` | `views/config/rules.dart` | `globalRulesProvider` 的 put / delAll / order |
+| 脚本 | `lib/ui/pages/settings/scripts_page.dart` | `views/config/scripts.dart` | `scriptsProvider` + `scriptsActionProvider`；编辑复用上游 `EditorPage` 与 `scriptTemplate` |
+| DNS | `lib/ui/pages/settings/dns_page.dart` + `override_page.dart` | `views/config/dns.dart` | `DnsView` 的 `OverrideSpec`（`patchClashConfigProvider.dns` + `dnsOverrideKeys`） |
+
+- 新增通用渲染器 `FlvpOverridePage<K, M>`（`lib/ui/pages/settings/override_page.dart`）：吃上游 `OverrideSpec`，按 `sectionOf` 分组、按 `OverrideField` 实际子类（Toggle / Options / Number / Text / List）分派渲染 Floway 行，校验直接用字段自带的 `validator` / `itemValidator`。DNS 用它；后续「覆写（Extend）」也可直接复用，无需再复制字段映射。
+- 新增共用交互：`showFlvpConfirm`（`widgets/page_scaffold.dart`）与 `FlvpPageScaffold.scrollable`（可拖拽排序的列表页需要自带滚动，不能套外层 SingleChildScrollView）。
+- 未改上游 `lib/views/**`：新页面只组合上游既有 API（`DnsView().spec`、`RuleForm`、`EditorPage`、各 provider），不复制业务规则。
+
+验证：`flutter analyze --no-pub lib` 干净；`test/ui` 全量 32 例通过。
+
+余下同类页面（尚未做）：资源更新（`views/resources.dart`）、备份与恢复（`backup_and_restore.dart`）、配置页的运行配置（`profiles/preview.dart`）、编辑（`profiles/edit.dart`）、覆写（`profiles/extend/extend.dart`）、自定义工作区（`profiles/custom/custom.dart`）。
+
+### 设置二级页 Floway 化（第二批，2026-11-01）
+
+第一批之后再补 3 个页面，仍只改呈现、数据与生效方式全部沿用上游：
+
+| 页面 | 新文件 | 上游来源 | 写回的上游状态 |
+| --- | --- | --- | --- |
+| 资源更新 | `lib/ui/pages/settings/resources_page.dart` | `views/resources.dart` | `resourcesActionProvider` / `geoResourceActionProvider` / `patchClashConfigProvider.geo*` |
+| 备份与恢复 | `lib/ui/pages/settings/backup_page.dart` | `views/backup_and_restore.dart` | `backupActionProvider` + `davSettingProvider` + `appSettingProvider.restoreStrategy`；WebDAV 表单复用上游 `WebDAVForm`，连通性仍用 `DAVConnectionController` |
+| 运行配置 | `lib/ui/pages/subscriptions/preview_page.dart` | `views/profiles/preview.dart` | `setupActionProvider.getProfileWithId` 的解析结果，只读展示 + 复制 |
+
+- 恢复内容/恢复策略/更新间隔等选择改走 `showFlvpOptionsPrompt` / `showFlvpNumberPrompt`，校验与写入的目标仍是上游 provider。
+- 备份页的 `WebDAVForm` 直接复用上游表单，避免复制账号密码校验与 DAV 连接逻辑。
+
+验证：`flutter analyze --no-pub lib` 干净；`test/ui` 全量 34 例通过（新增 `test/ui/settings_floway_pages_test.dart` 覆盖字体页写入与 DNS 覆写条目新增）。
+
+余下同类页面（尚未做）：配置页的编辑（`views/profiles/edit.dart`）、覆写（`views/profiles/extend/extend.dart`）、自定义工作区（`views/profiles/custom/custom.dart`）。
+
+### 配置页二/三级页面 Floway 化（2026-11-01）
+
+配置列表的三个二级页（编辑 / 覆写 / 自定义工作区）从上游页面改为 Floway 版式，数据与动作仍全部走上游：
+
+| 页面 | 新文件 | 上游来源 | 写回的上游状态 |
+| --- | --- | --- | --- |
+| 编辑 | `lib/ui/pages/subscriptions/edit_page.dart` | `views/profiles/edit.dart` | `profilesActionProvider.putProfile` / `updateProfile`、`Profile.saveFile`（先交给内核校验）、`setupActionProvider.autoApplyProfile` |
+| 覆写 | `lib/ui/pages/subscriptions/extend_page.dart` + `profile_rules_page.dart` | `views/profiles/extend/extend.dart` + `standard.dart` + `script.dart` | `profile.extendType` / `scriptId` / `matchTarget`、`profileRulesProvider`（put / putAll / delAll / order）、`setupActionProvider.applyProfile` |
+| 自定义工作区 | `lib/ui/pages/subscriptions/custom_page.dart` | `views/profiles/custom/custom.dart` | `customProfileDataProvider`、`profileRulesProvider`、`proxyGroupsProvider`、`proxyDialersProvider`、`profilesActionProvider.readCustomImport` / `importCustomProfile` / `touchProfile` / `deleteProfile` |
+
+- 覆写页拆成两层：顶部「覆写模式」（标准 / 脚本，写 `extendType`），标准模式下列出「附加规则」「匹配目标」两行；规则编辑放在新页 `FlvpProfileRulesPage`（规则卡片、拖拽排序、选择模式批量删除、规则预设、匹配目标选择、跳转全局附加规则）。脚本模式列出 `scriptsProvider` 供选择，并跳到 Floway 脚本页。
+- 「立即应用」沿用上游语义：只有当前配置、且输入与已应用的不一致时出现，调用 `setupAction.applyProfile`；离开页面时 `autoApplyProfile`。
+- 自定义工作区：外壳、概览（规则 / 服务提供者 / DNS / 更多，带问题计数与总问题横幅）与「更多」页（拨号代理 / NTP / 嗅探 / TUN）是 Floway 版式；策略组列表直接复用上游 `CustomProxyGroupsSection`（sliver 嵌进 Floway 页面，整页套 `FlvpUpstreamPage` 统一配色）。新建未改动的配置离开时丢弃、改过则 `touchProfile` + `autoApplyProfile`，与上游一致。
+- 单份配置的 DNS / NTP / 嗅探 / TUN 覆写改走 `FlvpOverridePage`（取 `DnsView.profile` / `NtpView` / `SnifferView` / `TunView` 的 `spec`），并给覆写页补了「配置问题」横幅（读 `spec.target.issues`，自定义配置里能直接看到哪一项不合法）。
+- 共用件：新增 `lib/ui/widgets/rule_row.dart` 的 `FlvpRuleRow`（附加规则页与覆写规则页共用，带选择模式），`lib/ui/pages/settings/rules_page.dart` 改为复用它，不再各写一份规则卡片。
+- 入口：配置卡片的「编辑 / 覆写」改走 `pushFlvpPage`；「添加配置 → 自定义」直接打开 `FlvpCustomProfilePage(isNew: true)`。
+
+验证：`flutter analyze --no-pub lib test` 干净；`test/ui` 全量 38 例通过（新增 `test/ui/subscriptions_floway_pages_test.dart` 4 例：编辑页字段与名称校验、覆写模式切换写回 `extendType`、单份 DNS 覆写写入 `overrides.dnsOverrideKeys`、自定义工作区外壳与「更多」页分区）；`flutter build windows --debug` 通过。
+
+未做：自定义工作区里的规则 / 服务提供者 / 拨号代理 / 策略组编辑器仍是上游页面与上游表单弹层（只统一了配色）；编辑页的源文件编辑器仍是上游 `EditorPage`；这些子编辑器没有 widget 测试，运行期（尤其策略组的新增/编辑弹层）需用户实测。
+
+### 移动端打磨、安卓图标与发布流程（2026-11-01）
+
+- **底栏改悬浮 dock**（`lib/ui/shells/mobile_shell.dart`）：左右各留 12、底部按安全区留白，圆角 26、`FlvpElevation.float` 投影，内容从 dock 下面穿过（滚动区底部内边距改为 dock 高度 + 12）。选中项在图标后面垫一块主色圆角底（46×30），图标与文字都换成主色/主色底白字。FAB、snackbar 的底部偏移一并按 dock 高度重算。
+  - 坑：`FlvpRipple` 内部是 `Stack`，默认 `topStart` 对齐；槽位宽度是紧约束，子内容不包 `Center` 会贴在槽位左侧，四个图标看起来就不居中（已修，并加了槽位中线的回归断言）。
+- **页面标题收紧**：顶部 app bar 56 → 48，大标题 32 → 26（行高 1.2、字距 -0.6），标题与内容的间距 20 → 14，收起后的小标题 19 → 17。
+- **应用访问控制改 Floway 页**（`lib/ui/pages/settings/access_page.dart`）：外壳、状态卡、搜索、应用列表与批量操作重写；**补回「发起授权」入口**——列表为空时无论 `isInstalledAppsPermissionGranted` 怎么答都先摆出授权按钮（上游 `AccessView` 只在「列表为空且权限未授予」时显示，权限接口误报就再也点不到授权）。数据仍走 `accessControlStateProvider` / `packagesProvider` / `vpnSettingProvider`，保存时只保留当前可见的应用包名。
+- **安卓图标换成 Floway 标识**：新增 `tool/make_android_icons.py`，从 `assets/branding/floway.png` 的 alpha 通道生成白色剪影 `ic_service.png`（通知小图标、QS 磁贴）与彩色 `ic_documents.png`（Documents provider 根图标），各 5 个密度；删除 FlClash 的 `drawable/ic.xml`、`ic_service.xml`，manifest 磁贴图标改指 `@drawable/ic_service`，`FilesProvider` 改指 `ic_documents`。
+- **安卓隐藏无用的 TUN 设置**（`lib/ui/pages/settings/network_page.dart`）：`TUN 接管`（TUN 模式/网络栈/出口网卡）与 `TUN 路由`（MTU/路由地址/排除地址/绕过私有网段）两段只在桌面端显示；安卓保留 VPN 段。设置一级页「网络设置」的副标题按平台区分（安卓：VPN、绕过规则与出站连接）。底部的说明文案同样按平台改写。
+- **修复重连后「未选择节点」**（`lib/ui/backend.dart`）：停止时界面会把当前节点清空，而内核重连后通常沿用上一次的 groups、不再推送，于是节点一直停在空状态（重启应用才会重新推一次）。现在 `isStartProvider` 变回 true 时在帧后主动补推一次当前节点；groups 之后有变化仍会照常覆盖。
+
+### 发布流程（tag 驱动）
+
+- `pubspec.yaml` 版本改为 `0.0.1+1`。
+- 新增 `.github/workflows/release.yml`：推送 `v*` 标签（或手动 workflow_dispatch 指定标签）时并行构建 **Android APK**（ubuntu + JDK 17 + Go + Flutter 3.47.7 + NDK r28c，签名材料来自 Secrets）与 **Windows 安装包**（windows-2022 + Go + Rust + Flutter），产物经 `dart setup.dart <platform> --env stable` 落到 `dist/`，最后由 `softprops/action-gh-release` 连同 `SHA256SUMS` 一起发布。
+- 签名：keystore 在 `C:\Users\14844\Documents\floway-release.jks`（alias `floway`，PKCS12/RSA 4096/10000 天），四个 Secrets（`KEYSTORE` base64、`KEY_ALIAS`、`STORE_PASSWORD`、`KEY_PASSWORD`）已用 `gh secret set` 写入仓库 WEP-56/Floway；同一份信息备份在 `C:\Users\14844\Documents\secrets.txt`。`.gitignore` 补上 `android/local.properties`、`android/app/keystore.jks`、`android/key.properties`、`/dist/`、`/env.json`。
+
+验证：`flutter analyze --no-pub lib test` 干净；`test/ui` 全量 40 例通过（新增 `test/ui/mobile_shell_test.dart` 覆盖 dock 槽位居中与等宽、`test/ui/settings_floway_pages_test.dart` 增加访问控制页授权入口与保存）。安卓实机由用户验证：dock 居中、标题间距、通知图标、访问控制授权、TUN 隐藏、重连节点均正常。

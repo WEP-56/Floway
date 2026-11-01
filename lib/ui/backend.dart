@@ -116,8 +116,17 @@ class _FlvpBackendBinderState extends ConsumerState<FlvpBackendBinder> {
     widget.store.backend = _backend;
     ref.listenManual(isStartProvider, (_, next) {
       widget.store.syncRunning(next);
-      // 停止后上游不再给出口节点，界面不该继续显示上一次的节点。
-      if (!next) widget.store.syncCurrentNode(null);
+      if (!next) {
+        // 停止后上游不再给出口节点，界面不该继续显示上一次的节点。
+        widget.store.syncCurrentNode(null);
+        return;
+      }
+      // 重新连上时要把停止时清掉的节点补回来：内核沿用上一次的 groups，
+      // 不一定会再推一次，只等 groups 变化会一直停在“未选择节点”。
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        _pushCurrentNode(ref.read(groupsProvider));
+      });
     });
     ref.listenManual(
       networkSettingProvider.select((state) => state.systemProxy),

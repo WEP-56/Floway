@@ -70,12 +70,18 @@ class FlvpPageScaffold extends StatelessWidget {
     required this.title,
     this.subtitle,
     this.actions = const [],
+    this.scrollable = true,
     required this.child,
   });
 
   final String title;
   final String? subtitle;
   final List<Widget> actions;
+
+  /// 需要页面自带列表/滚动（例如可拖拽排序的列表）时置 false，正文直接
+  /// 放进 Expanded，不再套一层 SingleChildScrollView。
+  final bool scrollable;
+
   final Widget child;
 
   @override
@@ -141,20 +147,25 @@ class FlvpPageScaffold extends StatelessWidget {
               ),
             ),
             Expanded(
-              child: ScrollConfiguration(
-                behavior: ScrollConfiguration.of(
-                  context,
-                ).copyWith(scrollbars: false),
-                child: SingleChildScrollView(
-                  padding: EdgeInsets.fromLTRB(
-                    20,
-                    8,
-                    20,
-                    24 + padding.bottom,
-                  ),
-                  child: child,
-                ),
-              ),
+              child: scrollable
+                  ? ScrollConfiguration(
+                      behavior: ScrollConfiguration.of(
+                        context,
+                      ).copyWith(scrollbars: false),
+                      child: SingleChildScrollView(
+                        padding: EdgeInsets.fromLTRB(
+                          20,
+                          8,
+                          20,
+                          24 + padding.bottom,
+                        ),
+                        child: child,
+                      ),
+                    )
+                  : Padding(
+                      padding: EdgeInsets.only(bottom: padding.bottom),
+                      child: child,
+                    ),
             ),
           ],
         ),
@@ -272,8 +283,7 @@ Future<int?> showFlvpNumberPrompt({
 }
 
 /// 单选弹层：选中即写回并关闭。
-Future<T?> showFlvpOptionsPrompt<T>({
-  required BuildContext context,
+Future<T?> showFlvpOptionsPrompt<T>({  required BuildContext context,
   required FlvpPlatform platform,
   required String title,
   String? subtitle,
@@ -299,6 +309,58 @@ Future<T?> showFlvpOptionsPrompt<T>({
         options: options,
         onChanged: (next) => close(next),
       ),
+    ),
+  );
+  return completer.future;
+}
+
+/// 确认弹层：确认返回 true，取消 / 关闭返回 null。
+Future<bool?> showFlvpConfirm({
+  required BuildContext context,
+  required FlvpPlatform platform,
+  required String title,
+  String? message,
+  String confirmLabel = '确定',
+  String cancelLabel = '取消',
+  bool danger = false,
+}) {
+  final completer = Completer<bool?>();
+  final host = FlvpModalHost.of(context);
+  final colors = FlvpThemeScope.colorsOf(context);
+
+  void close([bool? result]) {
+    host.close();
+    if (!completer.isCompleted) completer.complete(result);
+  }
+
+  host.show(
+    (context) => FlvpModal(
+      platform: platform,
+      title: title,
+      onClose: () => close(),
+      footer: [
+        FlvpButton(
+          variant: FlvpButtonVariant.text,
+          label: cancelLabel,
+          onPressed: () => close(),
+        ),
+        FlvpButton(
+          variant: danger ? FlvpButtonVariant.danger : FlvpButtonVariant.filled,
+          label: confirmLabel,
+          onPressed: () => close(true),
+        ),
+      ],
+      child: message == null
+          ? const SizedBox.shrink()
+          : Text(
+              message,
+              style: flvpText(
+                13.5,
+                weight: FontWeight.w400,
+                height: 1.6,
+                color: colors.ink2,
+              ),
+            ),
     ),
   );
   return completer.future;

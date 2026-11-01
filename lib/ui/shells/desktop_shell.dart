@@ -407,7 +407,9 @@ class _FlvpDesktopShellState extends State<FlvpDesktopShell> {
                             FlvpPageKey.profiles => const FlvpSubscriptionsPage(
                               platform: FlvpPlatform.pc,
                             ),
-                            FlvpPageKey.info => const FlvpInfoPage(),
+                            FlvpPageKey.info => const FlvpInfoPage(
+                              platform: FlvpPlatform.pc,
+                            ),
                             FlvpPageKey.settings => const FlvpSettingsPage(
                               platform: FlvpPlatform.pc,
                             ),

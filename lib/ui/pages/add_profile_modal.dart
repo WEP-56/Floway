@@ -5,7 +5,6 @@ import 'package:floway/common/string.dart';
 import 'package:floway/pages/scan.dart';
 import 'package:floway/providers/providers.dart';
 import 'package:floway/ui/navigator.dart';
-import 'package:floway/views/profiles/custom/custom.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
@@ -15,7 +14,8 @@ import '../design/tokens.dart';
 import '../store/store_scope.dart';
 import '../widgets/controls.dart';
 import '../widgets/feedback.dart';
-import '../widgets/upstream_page.dart';
+import '../widgets/page_scaffold.dart';
+import 'subscriptions/custom_page.dart';
 
 /// 「添加配置」：链接 / 本地文件 / 二维码 / 自定义四种上游入口，
 /// 全部落在 Floway 的弹层与表单外观上，动作直接调用上游 `profilesAction`。
@@ -143,9 +143,13 @@ class _FlvpAddProfileModalState extends ConsumerState<FlvpAddProfileModal> {
     final id = ref
         .read(profilesActionProvider.notifier)
         .addCustomProfile('未命名配置');
-    final future = openFlvpUpstreamPage(
+    final future = pushFlvpPage<void>(
       context,
-      CustomProfileView(profileId: id, isNew: true),
+      FlvpCustomProfilePage(
+        profileId: id,
+        platform: widget.platform,
+        isNew: true,
+      ),
     );
     widget.onClose();
     unawaited(future);

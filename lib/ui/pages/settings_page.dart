@@ -7,15 +7,8 @@ import 'package:floway/common/l10n_labels.dart';
 import 'package:floway/enum/enum.dart';
 import 'package:floway/models/models.dart';
 import 'package:floway/providers/providers.dart';
-import 'package:floway/views/access.dart';
-import 'package:floway/views/backup_and_restore.dart';
-import 'package:floway/views/config/dns.dart';
-import 'package:floway/views/config/rules.dart';
-import 'package:floway/views/config/scripts.dart';
 import 'package:floway/views/config/user_agents.dart';
 import 'package:floway/views/developer.dart';
-import 'package:floway/views/font_family.dart';
-import 'package:floway/views/resources.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
 
@@ -28,9 +21,16 @@ import '../widgets/page_scaffold.dart';
 import '../widgets/settings_section.dart';
 import '../widgets/upstream_page.dart';
 import 'settings/about_page.dart';
+import 'settings/access_page.dart';
 import 'settings/hotkey_page.dart';
 import 'settings/inbound_page.dart';
 import 'settings/custom_resources_page.dart';
+import 'settings/dns_page.dart';
+import 'settings/backup_page.dart';
+import 'settings/font_page.dart';
+import 'settings/resources_page.dart';
+import 'settings/rules_page.dart';
+import 'settings/scripts_page.dart';
 import 'settings/network_page.dart';
 import 'settings/on_demand_page.dart';
 
@@ -366,7 +366,7 @@ class _FlvpSettingsPageState extends ConsumerState<FlvpSettingsPage> {
               icon: 'Settings',
               title: '字体与字号',
               subtitle: '$fontLabel$scaleLabel',
-              onTap: () => _openUpstream(const FontFamilyView()),
+              onTap: () => _open(FlvpFontPage(platform: widget.platform)),
             ),
             FlvpSettingsValue(
               icon: 'Zap',
@@ -470,7 +470,9 @@ class _FlvpSettingsPageState extends ConsumerState<FlvpSettingsPage> {
             FlvpSettingsLink(
               icon: 'Network',
               title: '网络设置',
-              subtitle: '系统代理、TUN、排除域名与出站连接',
+              subtitle: pc
+                  ? '系统代理、TUN、排除域名与出站连接'
+                  : 'VPN、绕过规则与出站连接',
               onTap: () => _open(FlvpNetworkPage(platform: widget.platform)),
             ),
             FlvpSettingsValue(
@@ -522,19 +524,19 @@ class _FlvpSettingsPageState extends ConsumerState<FlvpSettingsPage> {
               title: 'DNS',
               subtitle: '${clash.dns.enable ? '已启用' : '未启用'} · '
                   '${clash.dns.nameserver.length} 个上游',
-              onTap: () => _openUpstream(const DnsView()),
+              onTap: () => _open(FlvpDnsPage(platform: widget.platform)),
             ),
             FlvpSettingsLink(
               icon: 'SlidersHorizontal',
               title: '附加规则',
               subtitle: '全局规则的顺序、匹配目标与选择器',
-              onTap: () => _openUpstream(const AddedRulesView()),
+              onTap: () => _open(FlvpAddedRulesPage(platform: widget.platform)),
             ),
             FlvpSettingsLink(
               icon: 'Activity',
               title: '脚本',
               subtitle: '本地与远程脚本、配置关联',
-              onTap: () => _openUpstream(const ScriptsView()),
+              onTap: () => _open(FlvpScriptsPage(platform: widget.platform)),
             ),
           ],
         ),
@@ -554,7 +556,7 @@ class _FlvpSettingsPageState extends ConsumerState<FlvpSettingsPage> {
               icon: 'Download',
               title: '资源更新',
               subtitle: 'Geo 数据、远程规则、脚本与图标',
-              onTap: () => _openUpstream(const ResourcesView()),
+              onTap: () => _open(FlvpResourcesPage(platform: widget.platform)),
             ),
           ],
         ),
@@ -576,7 +578,7 @@ class _FlvpSettingsPageState extends ConsumerState<FlvpSettingsPage> {
                 icon: 'Settings',
                 title: '应用访问控制',
                 subtitle: '允许或拒绝指定应用走代理',
-                onTap: () => _openUpstream(const AccessView()),
+                onTap: () => _open(FlvpAccessPage(platform: widget.platform)),
               ),
           ],
         ),
@@ -590,7 +592,7 @@ class _FlvpSettingsPageState extends ConsumerState<FlvpSettingsPage> {
               icon: 'Archive',
               title: '备份与恢复',
               subtitle: '本地文件与 WebDAV，含恢复策略',
-              onTap: () => _openUpstream(const BackupAndRestore()),
+              onTap: () => _open(FlvpBackupPage(platform: widget.platform)),
             ),
           ],
         ),
