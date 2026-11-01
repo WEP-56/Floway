@@ -145,6 +145,15 @@ abstract class GomobileBind : DefaultTask() {
             environment("PATH", path)
             environment("ANDROID_HOME", sdkDirectory.get().asFile.path)
             environment("ANDROID_NDK_HOME", ndkDirectory.get().asFile.path)
+            // gomobile generates its module under the OS temp directory, which is not a
+            // git work tree, so `go build` fails to stamp VCS information there.
+            environment(
+                "GOFLAGS",
+                listOfNotNull(
+                    System.getenv("GOFLAGS")?.takeIf { it.isNotBlank() },
+                    "-buildvcs=false",
+                ).joinToString(" "),
+            )
             commandLine(
                 tools.resolve("gomobile$executableSuffix").path,
                 "bind",
