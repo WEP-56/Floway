@@ -51,6 +51,17 @@ jobs:
           flutter-version: ${{ env.FLUTTER_VERSION }}
           cache: true
 
+      - name: Install dependencies
+        run: flutter pub get
+
+      # setup.dart 用 dart pub global activate 装的 flutter_distributor 打包，
+      # 它的 bin 目录默认不在 PATH 上。
+      - name: Add pub cache to PATH
+        run: echo "$HOME/.pub-cache/bin" >> "$GITHUB_PATH"
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
       - name: Setup NDK
         uses: nttld/setup-ndk@v1
         id: ndk
@@ -123,6 +134,9 @@ jobs:
           channel: stable
           flutter-version: ${{ env.FLUTTER_VERSION }}
           cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
 
       - name: Enable git long paths
         run: git config --global core.longpaths true
