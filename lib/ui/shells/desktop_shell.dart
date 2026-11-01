@@ -10,7 +10,7 @@ import '../design/tokens.dart';
 import '../icons/flvp_icon.dart';
 import '../nav.dart';
 import '../pages/dashboard_page.dart';
-import '../pages/import_sub_modal.dart';
+import '../pages/add_profile_modal.dart';
 import '../pages/info_page.dart';
 import '../pages/nodes_page.dart';
 import '../pages/settings_page.dart';
@@ -86,7 +86,7 @@ class _FlvpDesktopShellState extends State<FlvpDesktopShell> {
     final host = _host.currentState!;
     host.show(
       (context) =>
-          FlvpImportSubModal(platform: FlvpPlatform.pc, onClose: host.close),
+          FlvpAddProfileModal(platform: FlvpPlatform.pc, onClose: host.close),
     );
   }
 
@@ -326,7 +326,7 @@ class _FlvpDesktopShellState extends State<FlvpDesktopShell> {
       FlvpPageKey.profiles => FlvpButton(
         size: FlvpControlSize.sm,
         icon: const FlvpIcon('Plus', size: 16),
-        label: '导入订阅',
+        label: '添加配置',
         onPressed: _openImport,
       ),
       FlvpPageKey.info => null,

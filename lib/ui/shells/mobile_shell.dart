@@ -6,7 +6,7 @@ import '../design/tokens.dart';
 import '../icons/flvp_icon.dart';
 import '../nav.dart';
 import '../pages/dashboard_page.dart';
-import '../pages/import_sub_modal.dart';
+import '../pages/add_profile_modal.dart';
 import '../pages/info_page.dart';
 import '../pages/nodes_page.dart';
 import '../pages/settings_page.dart';
@@ -78,7 +78,7 @@ class _FlvpMobileShellState extends State<FlvpMobileShell> {
   void _openImport() {
     final host = _host.currentState!;
     host.show(
-      (context) => FlvpImportSubModal(
+      (context) => FlvpAddProfileModal(
         platform: FlvpPlatform.mobile,
         onClose: host.close,
       ),
@@ -290,7 +290,7 @@ class _ExtendedFab extends StatelessWidget {
     final colors = FlvpThemeScope.colorsOf(context);
     return Semantics(
       button: true,
-      label: '导入订阅',
+      label: '添加配置',
       child: FlvpRipple(
         color: colors.onpcontainer,
         borderRadius: BorderRadius.circular(16),
@@ -322,7 +322,7 @@ class _ExtendedFab extends StatelessWidget {
                   child: Padding(
                     padding: const EdgeInsets.only(right: 20),
                     child: Text(
-                      '导入订阅',
+                      '添加配置',
                       maxLines: 1,
                       softWrap: false,
                       style: flvpText(14.5, color: colors.onpcontainer),

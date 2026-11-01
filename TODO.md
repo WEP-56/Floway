@@ -373,3 +373,14 @@ Windows 侧边栏与 Android 底栏统一为五个主入口：**仪表盘 / 代�
 - 静态分析：flutter analyze --no-pub lib 无问题。
 - 本批次余下：代理页策略组与节点（PROXY-01～10）、配置页编辑与自定义工作区（PROFILE-13～16）。
 - 交接文档见仓库根 handoff.md（现状、接线方式、上游入口、环境坑与下一步）。
+### 配置页接线（2026-11-01 追加）
+
+- 配置列表改为直接读上游 `profilesProvider` / `currentProfileIdProvider`（与代理页同一模式，不再经 `FlvpDesignStore` 镜像）：卡片显示真实名称、类型（远程/本地/自定义）、订阅用量与到期、最后更新时间、自定义配置的策略组数量；点击卡片或「切换」写 `currentProfileIdProvider`，由上游 `core_manager` 应用。
+- 卡片菜单对齐上游 `ProfileItem`：编辑、重命名（自定义）、覆写、同步、运行配置、复制链接、二维码分享、导出文件、删除；删除前用 `profilesAction.providerUsers` 提示引用方，与上游语义一致。
+- 工具条：更新全部（`profilesAction.updateProfiles`，逐份 `showLoading` 并汇总失败）、排序（复用上游 `ReorderableProfilesSheet`）。
+- 二级页直接复用上游实现：`EditProfileView`（名称/URL/自动更新/age 密钥/源文件编辑与上传）、`ExtendView`（标准/脚本覆写）、`CustomProfileView`（自定义工作区：概览、代理、策略组、规则、DNS/NTP/嗅探/TUN）、`PreviewProfileView`（运行配置）。
+- 「导入订阅」弹层替换为「添加配置」（lib/ui/pages/add_profile_modal.dart）：链接（支持多行批量，`addProfileFromLink` / `addProfilesFromLinks`）、本地文件（`addProfileFormFile`）、二维码（桌面走图片识别 `addProfileFormQrCode`，手机走 `ScanPage` 后 `addProfileFromLink`）、自定义（`addCustomProfile` + 工作区）；按 PROFILE-08 移除「协议+地址+端口」的手动创建。
+- 配套小改动：`FlvpField` 增加 `multiline`（多行链接输入）；图标集补 `Eye`、`QrCode`；`FlvpBackend.updateProfiles` 改为更新全部远程配置（原为仅更新到期项）。
+- 验证：`flutter analyze --no-pub lib test` 无问题；新增 `test/ui/subscriptions_page_test.dart`（5 例）与 `test/ui/add_profile_modal_test.dart`（3 例）通过；`flutter build windows --debug` 通过。
+- 仍未完成：PROFILE-11 的编辑器 Floway 标题栏/搜索菜单外观、PROFILE-13～16 的 Floway 化外观（当前复用上游工作区与表单，风格仍是上游 Material）、PROFILE-04 的配置统计摘要；信息页（INFO）、设置页（SET）未开始。
+- 既有失败（与本轮无关，未处理）：`test/lint` 中 circular_progress / disposable_field / design_package 等仍报上一轮 `lib/ui/pages/nodes_page.dart`、`lib/ui/widgets/outbound_card.dart` 与上游 `lib/core/event.dart`、`lib/plugins/app.dart`；`test/widget_test.dart` 因 `FlvpApp` 外没有 `ProviderScope`，在仪表盘出口卡处崩溃。

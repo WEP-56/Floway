@@ -27,6 +27,7 @@
   - 图标资产已恢复：托盘四态 ico（灰/品牌蓝/TUN 青/安全模式橙）、应用 ico+png、Android 自适应图标（mipmap 前景图 + values-v27/night-v27 splash 指向）。
   - **刻意保留**的上游字样：lib/views/about.dart 的 GPL 归属（Clash.Meta + chen08209/FlClash）、pubspec description、安装器对旧 `com.follow` 目录的清理。
 - Windows 构建已验证：flutter build windows --debug 约 20～110s，产物 build\windows\x64\runner\Debug\Floway.exe（同目录 FlowayCore.exe、FlowayHelperService.exe）。运行期 IPC 正常（`[APP] IPC Connected`），服务 Running/Automatic，注册表端口与 Rust 侧一致。
+- **配置页已接上游（2026-11-01）**：列表读 `profilesProvider`/`currentProfileIdProvider`，卡片菜单覆盖编辑/重命名/覆写/同步/运行配置/复制链接/二维码/导出/删除，工具条有更新全部与排序；添加配置拆成链接/文件/二维码/自定义四个上游入口（lib/ui/pages/add_profile_modal.dart，旧的 import_sub_modal.dart 已删除）。编辑、覆写、自定义工作区、运行配置直接打开上游页面（见 §4）。
 - Android 构建**未验证**：Gradle wrapper 需下载 gradle-9.8.0-all（本地缓存只剩 0 字节 .part），当时用户代理未开、直连 services.gradle.org 超时。开代理后重跑 `flutter build apk --debug` 即可验证包名改动。
 - 工具链：Flutter 3.47.7 / Dart 3.13.5（E:\flutter）、Go（scoop shims，go1.27.3）、cargo 1.95、Visual Studio 2022（C++ 桌面工作负载）。
 
@@ -39,13 +40,15 @@
 - 生产入口以 `FlvpDesignStore(simulate: false)` 构造：无演示流量、无演示时长、累计为 0、`currentNode` 在内核未上报时是 `flvpIdleNode`（未选择节点）。演示基数 `flvpHistoryBase` 只在 simulate:true 时叠加。
 - FlvpBackend 方法：setRunning、setSystemProxy、setTunMode、setMode、setCurrentProfile、addProfileFromLink、deleteProfile、updateProfiles、testDelay。
 - store 回推方法：syncRunning、syncShortcuts、syncProfiles、syncDelayTesting、syncTraffic（KB/s，含曲线采样，首帧清演示波形）、syncTotals（GB）、syncUptime（秒）、syncCurrentNode。
-- 已接上游：启动/停止、出站模式、系统代理、TUN 开关、配置列表与当前配置、配置增删与全部更新、**代理页策略组/节点/切换/单点测速/整体测速**、**仪表盘状态/时长/延迟/订阅/上下行速度与曲线/累计流量/出口 IP 卡片**。
-- 未接：配置编辑与自定义工作区、信息页四类记录、设置页持久化回写、仪表盘其余卡片（连接统计、内网 IP、服务状态、内存、网络接管）。
+- 已接上游：启动/停止、出站模式、系统代理、TUN 开关、**配置列表与当前配置、配置增删/同步/全部更新/排序、配置编辑/覆写/自定义工作区/运行配置、添加配置四入口**、**代理页策略组/节点/切换/单点测速/整体测速**、**仪表盘状态/时长/延迟/订阅/上下行速度与曲线/累计流量/出口 IP 卡片**。
+- 未接：设置页持久化回写、信息页四类记录、仪表盘其余卡片（连接统计、内网 IP、服务状态、内存、网络接管）。
+- 配置页遗留：二级页目前直接复用上游页面（风格为上游 Material），PROFILE-11 的编辑器外观与 PROFILE-13～16 的 Floway 化外观尚未统一。
 
 ## 4. 上游入口速查
 
 - 内核与状态：isStartProvider、coreStatusProvider、setupActionProvider.setRunning/changeMode、patchClashConfigProvider.mode/tun.enable、networkSettingProvider.systemProxy。
-- 配置：profilesProvider、currentProfileIdProvider、profilesActionProvider（putProfile / addProfileFromLink / deleteProfile / updateProfile / autoUpdateProfiles / readCustomImport / importCustomProfile）。
+- 配置：profilesProvider、currentProfileIdProvider、profilesActionProvider（putProfile / addProfileFromLink / addProfilesFromLinks / addProfileFormFile / addProfileFormQrCode / addCustomProfile / updateProfile / updateProfiles / deleteProfile / providerUsers）、isUpdatingProvider(profile.updatingKey)、profileGroupsCountProvider(profileId)。
+- 配置二级页（直接 `BaseNavigator.push` 打开，均为上游页面）：views/profiles/edit.dart 的 `EditProfileView`（含 `renameProfile` 辅助）、extend/extend.dart 的 `ExtendView`、custom/custom.dart 的 `CustomProfileView`、preview.dart 的 `PreviewProfileView`、profiles.dart 的 `ReorderableProfilesSheet`、pages/editor.dart 的 `EditorPage`、pages/scan.dart 的 `ScanPage`。
 - 代理：groupsProvider（List<Group>，Group 有 type/all/now/testUrl/name）、selectedMapProvider（Map<String,String>）、delayProvider(proxyName:)、delayTestPhaseProvider(proxyName:)、delayTestingGroupsProvider（Set<String>）、proxiesActionProvider（changeProxyDebounce / proxyDelayTest / delayTestGroups / delayTestPageGroup）。
 - **延迟语义**：>0 才是真值；`-1` == delayTimedOutValue 表示超时；其他负数表示失败。显示前必须判 `<= 0`，否则会把 -1 当成 1ms 显示成绿色。
 - 流量与时长：trafficsProvider（FixedList<Traffic>，字节/秒，取 `[length-1]`）、totalTrafficProvider（Traffic，字节）、runTimeProvider（int?，**毫秒**）、isStartProvider。
@@ -78,22 +81,24 @@ Android 需要 Android SDK/NDK、Go 工具链与可用的 Gradle 下载链路，
 
 ## 7. 提交与推送状态
 
-- 本轮提交内容：命名与存储路径剥离 FlClash + 图标资产恢复 + 代理页与仪表盘接上游数据（含出口 IP 卡片、测速反馈、延迟负值语义、演示数据清出生产路径）。
+- 上一轮提交：命名与存储路径剥离 FlClash + 图标资产恢复 + 代理页与仪表盘接上游数据（含出口 IP 卡片、测速反馈、延迟负值语义、演示数据清出生产路径）。
+- 本轮提交：配置页接上游（列表/菜单/工具条/添加配置四入口 + 上游编辑、覆写、自定义工作区、运行配置、排序），`FlvpField.multiline`、Eye/QrCode 图标、`FlvpBackend.updateProfiles` 语义修正，新增两组页面级 widget 测试。
 - 推送：git push origin main（远端 https://github.com/WEP-56/Floway.git）。工作区应保持干净。
 
 ## 8. 下一步（用户指定顺序）
 
-按 **配置页 → 设置页 → 信息页** 推进：
+按 **配置页 → 设置页 → 信息页** 推进，配置页的功能入口已通，剩下外观与剩余项：
 
-1. 配置页：PROFILE-13～16 —— 配置编辑、源码与覆写、完整自定义工作区；参考 lib/views/profiles/edit.dart。
+1. 配置页收尾（可选）：PROFILE-11 编辑器外观、PROFILE-13～16 工作区 Floway 化、PROFILE-04 配置统计摘要。
 2. 设置页：SET 系列 —— 设置项持久化回写与上游入口补齐（当前设置页多数开关只改 store，没有落盘）。
-3. 信息页：INFO-03～10 —— 连接/日志/请求/规则四类记录，参考 lib/views/ 下对应视图。
+3. 信息页：INFO-03～10 —— 连接/日志/请求/DNS 四类记录，参考 lib/views/ 下对应视图。
 4. 仪表盘其余卡片：连接统计、内网 IP、服务状态、内存、网络接管（DASH 系列）。
 
 已知待办（非本轮）：
 - Android 构建验证（需开代理让 Gradle 下载发行包）。
 - TUN 实测（helper 与 core 已就绪，尚未在开启连接的状态下验证虚拟网卡与路由）。
 - 旧数据目录 `%APPDATA%\com.follow\Floway` 仍在（用户明确不迁移）。
+- 上游自带 `test/lint` 与 `test/widget_test.dart` 的既有失败（Floway 页面用了 CircularProgressIndicator、`FlvpApp` 缺 ProviderScope），未处理。
 
 ## 9. 验证约定
 

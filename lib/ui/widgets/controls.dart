@@ -389,6 +389,7 @@ class FlvpField extends StatefulWidget {
     required this.onChanged,
     this.placeholder,
     this.mono = false,
+    this.multiline = false,
   });
 
   final String label;
@@ -396,6 +397,9 @@ class FlvpField extends StatefulWidget {
   final ValueChanged<String> onChanged;
   final String? placeholder;
   final bool mono;
+
+  /// Grows to a few rows so a pasted batch of links stays readable.
+  final bool multiline;
 
   @override
   State<FlvpField> createState() => _FlvpFieldState();
@@ -440,8 +444,14 @@ class _FlvpFieldState extends State<FlvpField> {
           animation: _focus,
           builder: (context, _) => AnimatedContainer(
             duration: FlvpMotion.control,
-            height: 48,
-            padding: const EdgeInsets.symmetric(horizontal: 16),
+            height: widget.multiline ? null : 48,
+            constraints: widget.multiline
+                ? const BoxConstraints(minHeight: 48)
+                : null,
+            padding: EdgeInsets.symmetric(
+              horizontal: 16,
+              vertical: widget.multiline ? 12 : 0,
+            ),
             alignment: Alignment.centerLeft,
             decoration: BoxDecoration(
               color: colors.tile,
@@ -460,7 +470,8 @@ class _FlvpFieldState extends State<FlvpField> {
               controller: _controller,
               focusNode: _focus,
               onChanged: widget.onChanged,
-              maxLines: 1,
+              maxLines: widget.multiline ? 4 : 1,
+              minLines: widget.multiline ? 2 : 1,
               cursorColor: colors.primary,
               style: flvpText(
                 widget.mono ? 13 : 14,

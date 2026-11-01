@@ -238,7 +238,8 @@ class _RiverpodBackend implements FlvpBackend {
 
   @override
   Future<void> updateProfiles() async {
-    await _ref.read(profilesActionProvider.notifier).autoUpdateProfiles();
+    // 界面上的“更新全部”要更新所有远程配置，不只是到期的那几份。
+    await _ref.read(profilesActionProvider.notifier).updateProfiles();
   }
 
   @override
