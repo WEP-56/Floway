@@ -1,6 +1,8 @@
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
+import 'package:floway/providers/providers.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:window/window.dart';
 
@@ -181,8 +183,6 @@ class _FlvpDesktopShellState extends State<FlvpDesktopShell> {
   );
 
   Widget _rail(FlvpColors colors, bool expanded) {
-    final store = FlvpStoreScope.of(context);
-    final dark = store.resolvedDark;
     final width = expanded ? 224.0 : 96.0;
     return AnimatedContainer(
       duration: FlvpMotion.rail,
@@ -245,14 +245,26 @@ class _FlvpDesktopShellState extends State<FlvpDesktopShell> {
               onTap: () => setState(() => _page = item.key),
             ),
           const Spacer(),
-          _RailItem(
-            key: const ValueKey('nav-theme'),
-            icon: dark ? 'Sun' : 'Moon',
-            label: dark ? '浅色模式' : '深色模式',
-            shortLabel: dark ? '浅色' : '深色',
-            expanded: expanded,
-            width: width,
-            onTap: store.toggleTheme,
+          Consumer(
+            builder: (context, ref, _) {
+              final dark =
+                  ref.watch(currentBrightnessProvider) == Brightness.dark;
+              return _RailItem(
+                key: const ValueKey('nav-theme'),
+                icon: dark ? 'Sun' : 'Moon',
+                label: dark ? '浅色模式' : '深色模式',
+                shortLabel: dark ? '浅色' : '深色',
+                expanded: expanded,
+                width: width,
+                onTap: () => ref
+                    .read(themeSettingProvider.notifier)
+                    .update(
+                      (state) => state.copyWith(
+                        themeMode: dark ? ThemeMode.light : ThemeMode.dark,
+                      ),
+                    ),
+              );
+            },
           ),
         ],
       ),

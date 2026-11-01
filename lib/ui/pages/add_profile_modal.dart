@@ -15,6 +15,7 @@ import '../design/tokens.dart';
 import '../store/store_scope.dart';
 import '../widgets/controls.dart';
 import '../widgets/feedback.dart';
+import '../widgets/upstream_page.dart';
 
 /// 「添加配置」：链接 / 本地文件 / 二维码 / 自定义四种上游入口，
 /// 全部落在 Floway 的弹层与表单外观上，动作直接调用上游 `profilesAction`。
@@ -142,7 +143,7 @@ class _FlvpAddProfileModalState extends ConsumerState<FlvpAddProfileModal> {
     final id = ref
         .read(profilesActionProvider.notifier)
         .addCustomProfile('未命名配置');
-    final future = BaseNavigator.push<void>(
+    final future = openFlvpUpstreamPage(
       context,
       CustomProfileView(profileId: id, isNew: true),
     );

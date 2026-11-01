@@ -65,8 +65,13 @@ class FlvpColors {
 
 FlvpColors flvpLightColors(FlvpAccent accent) {
   final spec = flvpAccentSpecs[accent]!;
-  final h = spec.hue;
-  final k = spec.chromaFactor;
+  return flvpLightColorsOfHue(spec.hue, chromaFactor: spec.chromaFactor);
+}
+
+/// 主题色由上游 ThemeProps 决定后，界面按它的色相重新生成整套 token。
+FlvpColors flvpLightColorsOfHue(double hue, {double chromaFactor = 1}) {
+  final h = hue;
+  final k = chromaFactor;
   return FlvpColors(
     canvas: oklch(0.982, 0.006, h),
     frame: oklch(0.944, 0.014, h),
@@ -95,16 +100,25 @@ FlvpColors flvpLightColors(FlvpAccent accent) {
 
 FlvpColors flvpDarkColors(FlvpAccent accent) {
   final spec = flvpAccentSpecs[accent]!;
-  final h = spec.hue;
-  final k = spec.chromaFactor;
+  return flvpDarkColorsOfHue(spec.hue, chromaFactor: spec.chromaFactor);
+}
+
+/// [pureBlack] 对应上游 ThemeProps.pureBlack：深色下把底色压到纯黑。
+FlvpColors flvpDarkColorsOfHue(
+  double hue, {
+  double chromaFactor = 1,
+  bool pureBlack = false,
+}) {
+  final h = hue;
+  final k = chromaFactor;
   return FlvpColors(
-    canvas: oklch(0.165, 0.01, h),
-    frame: oklch(0.205, 0.013, h),
-    surface: oklch(0.228, 0.014, h),
-    surf2: oklch(0.272, 0.016, h),
-    surf3: oklch(0.322, 0.018, h),
-    dialog: oklch(0.245, 0.016, h),
-    tile: oklch(0.295, 0.017, h),
+    canvas: pureBlack ? const Color(0xff000000) : oklch(0.165, 0.01, h),
+    frame: pureBlack ? const Color(0xff070707) : oklch(0.205, 0.013, h),
+    surface: pureBlack ? const Color(0xff0d0d0d) : oklch(0.228, 0.014, h),
+    surf2: pureBlack ? const Color(0xff151515) : oklch(0.272, 0.016, h),
+    surf3: pureBlack ? const Color(0xff1d1d1d) : oklch(0.322, 0.018, h),
+    dialog: pureBlack ? const Color(0xff121212) : oklch(0.245, 0.016, h),
+    tile: pureBlack ? const Color(0xff1a1a1a) : oklch(0.295, 0.017, h),
     primary: oklch(0.8, 0.11 * k, h),
     onprimary: oklch(0.27, 0.12 * k, h),
     pcontainer: oklch(0.36, 0.11 * k, h),

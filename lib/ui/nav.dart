@@ -22,6 +22,15 @@ const List<FlvpNavItem> flvpNavItems = [
   FlvpNavItem(FlvpPageKey.settings, '设置', 'Settings'),
 ];
 
+/// The Android bar keeps four entries: five at a phone width are too tight, so
+/// 信息 moves into the settings page (see `FlvpSettingsPage.onNavigate`).
+const List<FlvpNavItem> flvpMobileNavItems = [
+  FlvpNavItem(FlvpPageKey.dashboard, '仪表盘', 'Gauge'),
+  FlvpNavItem(FlvpPageKey.proxies, '代理', 'Server'),
+  FlvpNavItem(FlvpPageKey.profiles, '配置', 'Rss'),
+  FlvpNavItem(FlvpPageKey.settings, '设置', 'Settings'),
+];
+
 const Map<FlvpPageKey, String> flvpPageTitles = {
   FlvpPageKey.dashboard: '仪表盘',
   FlvpPageKey.proxies: '代理',

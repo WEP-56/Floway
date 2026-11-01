@@ -96,7 +96,6 @@ class _FlvpMobileShellState extends State<FlvpMobileShell> {
     final statusHeight = widget.mock ? 44.0 : padding.top;
     final bottomInset = widget.mock ? 0.0 : padding.bottom;
     final navHeight = 80 + (bottomInset > 6 ? bottomInset : 6.0);
-
     return FlvpModalHost(
       key: _host,
       child: LayoutBuilder(
@@ -189,7 +188,10 @@ class _FlvpMobileShellState extends State<FlvpMobileShell> {
                                 FlvpPageKey.proxies => const FlvpNodesPage(platform: FlvpPlatform.mobile),
                                 FlvpPageKey.profiles => const FlvpSubscriptionsPage(platform: FlvpPlatform.mobile),
                                 FlvpPageKey.info => const FlvpInfoPage(),
-                FlvpPageKey.settings => const FlvpSettingsPage(platform: FlvpPlatform.mobile),
+                                FlvpPageKey.settings => FlvpSettingsPage(
+                                  platform: FlvpPlatform.mobile,
+                                  onNavigate: _go,
+                                ),
                               },
                             ],
                           ),
@@ -220,19 +222,34 @@ class _FlvpMobileShellState extends State<FlvpMobileShell> {
                   height: navHeight,
                   padding: EdgeInsets.fromLTRB(8, 12, 8, bottomInset),
                   color: colors.frame,
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceAround,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      for (final item in flvpNavItems)
-                        _NavItem(
-                          key: ValueKey('nav-${item.key.name}'),
-                          icon: item.icon,
-                          label: item.label,
-                          active: _page == item.key,
-                          onTap: () => _go(item.key),
-                        ),
-                    ],
+                  // Five entries at the design's 76pt do not fit a 360pt phone, so
+                  // the item width shrinks with the bar instead of overflowing.
+                  child: LayoutBuilder(
+                    builder: (context, constraints) {
+                      final width =
+                          (constraints.maxWidth / flvpMobileNavItems.length)
+                              .clamp(0.0, _navItemWidth);
+                      return Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceAround,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          for (final item in flvpMobileNavItems)
+                            _NavItem(
+                              key: ValueKey('nav-${item.key.name}'),
+                              icon: item.icon,
+                              label: item.label,
+                              // 信息 lives in the settings page on Android, so the
+                              // settings entry stays selected while it is open.
+                              active:
+                                  _page == item.key ||
+                                  (item.key == FlvpPageKey.settings &&
+                                      _page == FlvpPageKey.info),
+                              width: width,
+                              onTap: () => _go(item.key),
+                            ),
+                        ],
+                      );
+                    },
                   ),
                 ),
               ),
@@ -338,26 +355,32 @@ class _ExtendedFab extends StatelessWidget {
   }
 }
 
+/// The design's navigation item width; narrower bars shrink it to fit.
+const _navItemWidth = 76.0;
+
 class _NavItem extends StatelessWidget {
   const _NavItem({
     super.key,
     required this.icon,
     required this.label,
     required this.active,
+    required this.width,
     required this.onTap,
   });
 
   final String icon;
   final String label;
   final bool active;
+  final double width;
   final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     final colors = FlvpThemeScope.colorsOf(context);
+    final pill = width < 64 ? width : 64.0;
     return FlvpRipple(
       color: active ? colors.onscontainer : colors.ink,
-      surface: const Rect.fromLTWH(6, 0, 64, 32),
+      surface: Rect.fromLTWH((width - pill) / 2, 0, pill, 32),
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: onTap,
@@ -366,7 +389,7 @@ class _NavItem extends StatelessWidget {
           selected: active,
           label: label,
           child: SizedBox(
-            width: 76,
+            width: width,
             child: Column(
               mainAxisSize: MainAxisSize.min,
               spacing: 4,

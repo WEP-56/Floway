@@ -6,7 +6,6 @@ import 'package:floway/common/picker.dart';
 import 'package:floway/enum/enum.dart';
 import 'package:floway/models/models.dart';
 import 'package:floway/providers/providers.dart';
-import 'package:floway/ui/navigator.dart';
 import 'package:floway/views/profiles/custom/custom.dart';
 import 'package:floway/views/profiles/edit.dart';
 import 'package:floway/views/profiles/extend/extend.dart';
@@ -26,6 +25,7 @@ import '../widgets/controls.dart';
 import '../widgets/data_display.dart';
 import '../widgets/feedback.dart';
 import '../widgets/surfaces.dart';
+import '../widgets/upstream_page.dart';
 
 /// pages/Subscriptions.tsx — 配置列表。
 ///
@@ -91,10 +91,7 @@ class _FlvpSubscriptionsPageState extends ConsumerState<FlvpSubscriptionsPage> {
 
   void _openSort(List<Profile> profiles) {
     unawaited(
-      BaseNavigator.push<void>(
-        context,
-        ReorderableProfilesSheet(profiles: profiles),
-      ),
+      openFlvpUpstreamPage(context, ReorderableProfilesSheet(profiles: profiles)),
     );
   }
 
@@ -316,7 +313,7 @@ class _ProfileCardState extends ConsumerState<_ProfileCard> {
   void _edit() {
     if (_profile.type == ProfileType.custom) {
       unawaited(
-        BaseNavigator.push<void>(
+        openFlvpUpstreamPage(
           context,
           CustomProfileView(profileId: _profile.id),
         ),
@@ -324,19 +321,19 @@ class _ProfileCardState extends ConsumerState<_ProfileCard> {
       return;
     }
     unawaited(
-      BaseNavigator.push<void>(context, EditProfileView(profile: _profile)),
+      openFlvpUpstreamPage(context, EditProfileView(profile: _profile)),
     );
   }
 
   void _extend() {
     unawaited(
-      BaseNavigator.push<void>(context, ExtendView(profileId: _profile.id)),
+      openFlvpUpstreamPage(context, ExtendView(profileId: _profile.id)),
     );
   }
 
   void _preview() {
     unawaited(
-      BaseNavigator.push<void>(context, PreviewProfileView(profile: _profile)),
+      openFlvpUpstreamPage(context, PreviewProfileView(profile: _profile)),
     );
   }
 
