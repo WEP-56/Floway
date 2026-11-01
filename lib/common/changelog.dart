@@ -6,7 +6,7 @@ import 'package:floway/models/changelog.dart';
 
 import 'common.dart';
 
-const releaseChangelogJsonMarker = '<!-- flclash:changelog:json';
+const releaseChangelogJsonMarker = '<!-- floway:changelog:json';
 
 const _releaseChangelogJsonEndMarker = '-->';
 

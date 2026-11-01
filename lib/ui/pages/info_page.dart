@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../design/theme_scope.dart';
 import '../design/tokens.dart';
@@ -87,7 +87,10 @@ class _FlvpInfoPageState extends State<FlvpInfoPage> {
           ),
         ),
         const SizedBox(height: 12),
-        Expanded(
+        // 页面外壳把内容放在 SingleChildScrollView 里，高度无界，这里不能用
+        // Expanded；用最小高度保证空状态有足够的留白。
+        ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: 220),
           child: Center(
             child: Text(
               _empty[_tab]!,

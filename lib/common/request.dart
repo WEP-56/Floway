@@ -33,7 +33,7 @@ class Request {
           if (read == null) {
             return 'DIRECT';
           }
-          return FlClashHttpOverrides.findProxyForReader(read, uri);
+          return FlowayHttpOverrides.findProxyForReader(read, uri);
         };
         return client;
       },
@@ -88,6 +88,9 @@ class Request {
   /// Null when this build is current; throws when GitHub cannot be asked.
   Future<Map<String, dynamic>?> checkForUpdate() async {
     final release = await latestRelease();
+    if (release == null) {
+      return null;
+    }
     final remoteVersion = release['tag_name'] as String;
     final version = globalState.packageInfo.version;
     final hasUpdate =
@@ -96,8 +99,10 @@ class Request {
   }
 
   /// The release page redirect still answers once the hourly API quota is spent.
+  /// Null when the repository has no published release yet: the redirect then
+  /// lands on the plain releases page, which is not an error.
   @visibleForTesting
-  Future<Map<String, dynamic>> latestRelease() async {
+  Future<Map<String, dynamic>?> latestRelease() async {
     try {
       final response = await dio.get<Map<String, dynamic>>(
         'https://api.github.com/repos/$repository/releases/latest',
@@ -121,7 +126,7 @@ class Request {
     final segments = Uri.tryParse(location ?? '')?.pathSegments ?? const [];
     final tagIndex = segments.indexOf('tag') + 1;
     if (tagIndex == 0 || tagIndex >= segments.length) {
-      throw FormatException('No release tag in the redirect', location);
+      return null;
     }
     return {'tag_name': segments[tagIndex]};
   }

@@ -186,6 +186,15 @@ const flvpAppVersion = '0.1.0';
 const flvpCoreVersion = 'vp_core 1.1.0 + P001';
 const flvpBuildDate = '2026-10-30';
 
+/// 生产模式下内核还没给出出口节点时的占位。
+const flvpIdleNode = NodeInfo(
+  id: '',
+  name: '未选择节点',
+  sub: '',
+  proto: '—',
+  region: '',
+);
+
 const List<NodeInfo> flvpInitialNodes = [
   NodeInfo(
     id: 'auto',

@@ -7,7 +7,7 @@ void main() {
   late Directory directory;
 
   setUp(() {
-    directory = Directory.systemTemp.createTempSync('flclash_manifest_test_');
+    directory = Directory.systemTemp.createTempSync('floway_manifest_test_');
   });
 
   tearDown(() {

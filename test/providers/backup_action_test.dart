@@ -33,7 +33,7 @@ void main() {
   setUpAll(() async {
     await mockPreferences({'version': 1});
     await AppLocalizations.load(const Locale('en'));
-    home = Directory.systemTemp.createTempSync('flclash-backup-action-');
+    home = Directory.systemTemp.createTempSync('floway-backup-action-');
     await useAppPaths(home);
   });
 
@@ -67,7 +67,7 @@ void main() {
     late Directory kept;
 
     setUp(() {
-      kept = Directory.systemTemp.createTempSync('flclash-backup-kept-');
+      kept = Directory.systemTemp.createTempSync('floway-backup-kept-');
       addTearDown(() => kept.deleteSync(recursive: true));
     });
 
@@ -277,7 +277,7 @@ void main() {
         ..createSync(recursive: true)
         ..writeAsStringSync('current');
       final added = File(await appPath.getProfilePath('42'));
-      final staging = Directory.systemTemp.createTempSync('flclash-staging-');
+      final staging = Directory.systemTemp.createTempSync('floway-staging-');
       addTearDown(() => staging.deleteSync(recursive: true));
       for (final id in [41, 42]) {
         File(BackupEntries.resolve(staging.path, BackupEntries.profile(id)))

@@ -2,7 +2,7 @@ script_template: inno_setup.iss
 app_id: 728B3532-C74B-4870-9068-BE70FE12A3E6
 app_name: Floway
 publisher: chen08209
-publisher_url: https://github.com/chen08209/FlClash
+publisher_url: https://github.com/WEP-56/Floway
 display_name: Floway
 executable_name: Floway.exe
 output_base_file_name: Floway.exe

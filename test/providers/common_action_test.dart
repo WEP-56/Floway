@@ -26,8 +26,8 @@ void main() {
   setUpAll(() {
     core = MockCoreHandlerInterface();
     globalState.packageInfo = PackageInfo(
-      appName: 'FlClash',
-      packageName: 'com.follow.clash',
+      appName: 'Floway',
+      packageName: 'com.wep56.floway',
       version: runningVersion,
       buildNumber: '1',
     );

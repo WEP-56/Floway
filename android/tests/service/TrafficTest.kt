@@ -1,4 +1,4 @@
-package com.follow.clash.service.models
+package com.wep56.floway.service.models
 
 import java.util.Locale
 import org.junit.After

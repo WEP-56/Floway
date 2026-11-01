@@ -35,8 +35,8 @@ void main() {
   setUpAll(() async {
     await AppLocalizations.load(const Locale('en'));
     globalState.packageInfo = PackageInfo(
-      appName: 'FlClash',
-      packageName: 'com.follow.clash',
+      appName: 'Floway',
+      packageName: 'com.wep56.floway',
       version: '1.0.0',
       buildNumber: '1',
     );

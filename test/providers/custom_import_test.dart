@@ -684,7 +684,7 @@ tun:
 
     setUp(() async {
       await AppLocalizations.load(const Locale('en'));
-      home = Directory.systemTemp.createTempSync('flclash-custom-import-');
+      home = Directory.systemTemp.createTempSync('floway-custom-import-');
       await useAppPaths(home);
       testDatabase = db.Database(NativeDatabase.memory());
       db.database = testDatabase;

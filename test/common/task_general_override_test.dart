@@ -23,7 +23,7 @@ Future<YamlMap> _configOf(PatchClashConfig patchConfig) async {
       proxyGroups: const [],
       rules: const [],
       addedRules: const [],
-      defaultUA: 'FlClash-Test',
+      defaultUA: 'Floway-Test',
     ),
   );
   return loadYaml(result.yaml) as YamlMap;

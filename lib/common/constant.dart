@@ -9,20 +9,20 @@ import 'package:floway/enum/enum.dart';
 import 'package:floway/models/models.dart';
 import 'package:material_ui/material_ui.dart';
 
-const appName = 'FlClash';
-const appHelperService = 'FlClashHelperService';
+const appName = 'Floway';
+const appHelperService = 'FlowayHelperService';
 const coreManifestName = 'manifest.json';
 const browserUa =
     'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
-const packageName = 'com.follow.clash';
-final unixSocketPath = '/tmp/FlClashSocket_${Random().nextInt(10000)}.sock';
-final windowsPipeName = '\\\\.\\pipe\\FlClashCore_${_randomPipeId()}';
+const packageName = 'com.wep56.floway';
+final unixSocketPath = '/tmp/FlowaySocket_${Random().nextInt(10000)}.sock';
+final windowsPipeName = '\\\\.\\pipe\\FlowayCore_${_randomPipeId()}';
 const helperPort = 47890;
 const helperPortKey =
     'SYSTEM\\CurrentControlSet\\Services\\$appHelperService\\Runtime';
 const helperPortValue = 'Port';
-const helperSocketPath = '/run/flclash/helper.sock';
-const helperProtocolVersionHeader = 'x-flclash-helper-protocol';
+const helperSocketPath = '/run/floway/helper.sock';
+const helperProtocolVersionHeader = 'x-floway-helper-protocol';
 final helperProtocolVersion = Platform.isWindows ? '8' : '6';
 const maxTextScale = 1.4;
 const minTextScale = 0.8;
@@ -121,7 +121,7 @@ const systemDnsRecordKey = 'system_dns_record';
 const bootRecordKey = 'boot_record';
 const appliedConfigMd5Key = 'applied_config_md5';
 const defaultSystemDnsFallback = '223.5.5.5';
-const repository = 'chen08209/FlClash';
+const repository = 'WEP-56/Floway';
 const maxMobileWidth = 600;
 const maxLaptopWidth = 840;
 const defaultTestUrl = 'https://www.gstatic.com/generate_204';

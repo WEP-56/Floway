@@ -33,7 +33,7 @@ class MessageLookup extends MessageLookupByLibrary {
   static String m4(detail) => "No se pudieron borrar los datos: ${detail}";
 
   static String m5(code) =>
-      "Windows se negó a ejecutar FlClashCore.exe (error ${code}). Una directiva de control de aplicaciones, como Smart App Control o AppLocker, bloquea los programas sin firmar; permite FlClash en esa directiva o desactívala e inténtalo de nuevo.";
+      "Windows se negó a ejecutar FlowayCore.exe (error ${code}). Una directiva de control de aplicaciones, como Smart App Control o AppLocker, bloquea los programas sin firmar; permite Floway en esa directiva o desactívala e inténtalo de nuevo.";
 
   static String m6(name) =>
       "La app no pudo terminar de iniciarse dos veces seguidas. Para romper el ciclo, se ha deseleccionado el perfil ${name} y se ha omitido la configuración automática. Puedes volver a seleccionarlo en cualquier momento.";
@@ -569,7 +569,7 @@ class MessageLookup extends MessageLookupByLibrary {
     "core": MessageLookupByLibrary.simpleMessage("Núcleo"),
     "coreBlockedByPolicyTip": m5,
     "coreBlockedBySmartAppControlTip": MessageLookupByLibrary.simpleMessage(
-      "Smart App Control de Windows bloqueó FlClashCore.exe porque no está firmado. Abre Seguridad de Windows → Control de aplicaciones y navegador → Configuración de Smart App Control, elige Desactivado y vuelve a iniciar FlClash. Smart App Control no se puede volver a activar sin reinstalar Windows.",
+      "Smart App Control de Windows bloqueó FlowayCore.exe porque no está firmado. Abre Seguridad de Windows → Control de aplicaciones y navegador → Configuración de Smart App Control, elige Desactivado y vuelve a iniciar Floway. Smart App Control no se puede volver a activar sin reinstalar Windows.",
     ),
     "coreStatus": MessageLookupByLibrary.simpleMessage("Estado del núcleo"),
     "country": MessageLookupByLibrary.simpleMessage("Región"),
@@ -695,7 +695,7 @@ class MessageLookup extends MessageLookupByLibrary {
       "Cambios en esta declaración",
     ),
     "disclaimerDesc": MessageLookupByLibrary.simpleMessage(
-      "Antes de usar FlClash (“el Software”), lee con atención esta declaración y asegúrate de entenderla por completo. Pulsar “Aceptar” significa que has leído, comprendido y aceptado todos los términos siguientes. Si no estás de acuerdo, pulsa “Salir” y deja de usar el Software.",
+      "Antes de usar Floway (“el Software”), lee con atención esta declaración y asegúrate de entenderla por completo. Pulsar “Aceptar” significa que has leído, comprendido y aceptado todos los términos siguientes. Si no estás de acuerdo, pulsa “Salir” y deja de usar el Software.",
     ),
     "disclaimerLiabilityContent": MessageLookupByLibrary.simpleMessage(
       "En la máxima medida permitida por la ley aplicable, ni los desarrolladores ni ningún colaborador serán responsables de ningún daño directo, indirecto, incidental, especial, punitivo o emergente derivado del uso o de la imposibilidad de usar el Software, incluidos, entre otros, la pérdida de datos, los daños al dispositivo, los fallos de red, la interrupción de la actividad, el lucro cesante o cualquier disputa legal resultante, incluso si se les hubiera advertido de la posibilidad de tales daños.",
@@ -945,7 +945,7 @@ class MessageLookup extends MessageLookupByLibrary {
       "Comprobación de estado",
     ),
     "helperCorruptTip": MessageLookupByLibrary.simpleMessage(
-      "El servicio auxiliar (Helper) no está disponible; no se puede activar el modo TUN. Reinstala FlClash para restaurarlo.",
+      "El servicio auxiliar (Helper) no está disponible; no se puede activar el modo TUN. Reinstala Floway para restaurarlo.",
     ),
     "hex": MessageLookupByLibrary.simpleMessage("Hex"),
     "hideFromList": MessageLookupByLibrary.simpleMessage("Ocultar de la lista"),
@@ -1018,7 +1018,7 @@ class MessageLookup extends MessageLookupByLibrary {
     "init": MessageLookupByLibrary.simpleMessage("Inicio"),
     "initFailed": MessageLookupByLibrary.simpleMessage("Error al iniciar"),
     "initFailedTip": MessageLookupByLibrary.simpleMessage(
-      "FlClash encontró un error al iniciarse y no puede continuar. Copia los detalles para informar del problema. Si sigue ocurriendo, borrar los datos suele permitir que la app vuelva a iniciarse.",
+      "Floway encontró un error al iniciarse y no puede continuar. Copia los detalles para informar del problema. Si sigue ocurriendo, borrar los datos suele permitir que la app vuelva a iniciarse.",
     ),
     "initiator": MessageLookupByLibrary.simpleMessage("Origen de la solicitud"),
     "initiatorShort": MessageLookupByLibrary.simpleMessage("De"),
@@ -1789,10 +1789,10 @@ class MessageLookup extends MessageLookupByLibrary {
       "Enviado. Confirma la importación en el otro dispositivo.",
     ),
     "sendFromPhonePageTitle": MessageLookupByLibrary.simpleMessage(
-      "Enviar un enlace a FlClash",
+      "Enviar un enlace a Floway",
     ),
     "sendFromPhonePermissionDenied": MessageLookupByLibrary.simpleMessage(
-      "Para recibir un enlace desde el teléfono, FlClash necesita el permiso Dispositivos cercanos, que le da acceso a la red local. Actívalo en los ajustes de la aplicación.",
+      "Para recibir un enlace desde el teléfono, Floway necesita el permiso Dispositivos cercanos, que le da acceso a la red local. Actívalo en los ajustes de la aplicación.",
     ),
     "sendFromPhoneTip": MessageLookupByLibrary.simpleMessage(
       "Escanea el código con la cámara del teléfono y pega el enlace en la página que se abre. Ambos dispositivos deben estar en la misma red.",
@@ -1840,7 +1840,7 @@ class MessageLookup extends MessageLookupByLibrary {
       "No se pudo leer ningún proxy de los enlaces",
     ),
     "shareQrcodeTip": MessageLookupByLibrary.simpleMessage(
-      "Escanea con FlClash en otro dispositivo para importar este perfil.",
+      "Escanea con Floway en otro dispositivo para importar este perfil.",
     ),
     "show": MessageLookupByLibrary.simpleMessage("Mostrar"),
     "showLess": MessageLookupByLibrary.simpleMessage("Contraer"),

@@ -32,7 +32,7 @@ void main() {
 
   setUpAll(() async {
     await AppLocalizations.load(const Locale('en'));
-    home = Directory.systemTemp.createTempSync('flclash-profiles-action-');
+    home = Directory.systemTemp.createTempSync('floway-profiles-action-');
     await useAppPaths(home);
   });
 

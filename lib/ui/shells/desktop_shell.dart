@@ -1,7 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:window/window.dart';
 
 import '../design/motion.dart';
@@ -17,6 +17,7 @@ import '../pages/settings_page.dart';
 import '../pages/subscriptions_page.dart';
 import '../store/store_scope.dart';
 import '../widgets/controls.dart';
+import '../widgets/data_display.dart';
 import '../widgets/feedback.dart';
 import '../widgets/page_entrance.dart';
 import '../widgets/ripple.dart';
@@ -47,7 +48,17 @@ class _FlvpDesktopShellState extends State<FlvpDesktopShell> {
   bool _manual = false;
   final GlobalKey<FlvpModalHostState> _host = GlobalKey();
 
+  /// Shared by the page scroll view and its scrollbar: a [RawScrollbar] without
+  /// an attached position throws on hover/wheel, so both must use this one.
+  final ScrollController _paneScroll = ScrollController();
+
   bool get _windowControls => !kIsWeb && Platform.isWindows && !widget.framed;
+
+  @override
+  void dispose() {
+    _paneScroll.dispose();
+    super.dispose();
+  }
 
   void _toggleRail(bool current) => setState(() {
     _manual = true;
@@ -305,7 +316,10 @@ class _FlvpDesktopShellState extends State<FlvpDesktopShell> {
       FlvpPageKey.proxies => FlvpButton(
         variant: FlvpButtonVariant.tonal,
         size: FlvpControlSize.sm,
-        icon: const FlvpIcon('Zap', size: 15),
+        icon: FlvpSpin(
+          active: store.testing,
+          child: const FlvpIcon('Zap', size: 15),
+        ),
         label: store.testing ? '测试中…' : '测试延迟',
         onPressed: store.testing ? null : store.testNodes,
       ),
@@ -363,7 +377,9 @@ class _FlvpDesktopShellState extends State<FlvpDesktopShell> {
                     ).createShader(bounds),
                     blendMode: BlendMode.dstIn,
                     child: FlvpThinScrollbar(
+                      controller: _paneScroll,
                       child: SingleChildScrollView(
+                        controller: _paneScroll,
                         padding: const EdgeInsets.fromLTRB(24, 8, 24, 32),
                         child: FlvpPageEntrance(
                           key: ValueKey(_page),

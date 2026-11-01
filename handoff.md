@@ -1,4 +1,4 @@
-# Floway 开发交接（更新于 2026-10-31）
+# Floway 开发交接（更新于 2026-11-01）
 
 本文是快速接手入口。待办与验收口径以 TODO.md 为准，本文只记录现状、接线方式、坑与下一步。
 
@@ -7,6 +7,7 @@
 - 仓库 WEP-56/Floway（原 FLVPcore），主分支 main，本地目录 D:\FLVPcore。
 - vp_core 为冻结只读的历史分支：不删、不回退、不在其上开发、不作为兼容依据。
 - 主线定义：Floway 自己的前端资产（lib/ui 与品牌资源）+ FlClash 的运行实现（内核接入、TUN、订阅与配置、外部控制、平台适配）。FlClash 是权威实现，不做防御性设计，也不自行发明架构。
+- 命名与存储路径已与 FlClash 完全分开，两者可以同机共存、互不干扰（详见 §2）。
 - 平台只做 Windows 与 Android；不引入 macOS/Linux 工程与产物。
 - 许可证 GPL-3.0，保留上游版权与来源说明。
 - 凭据、token、订阅地址一律不入库、不入提交信息。
@@ -18,27 +19,39 @@
 - 运行基础已从 FlClash v0.9.2（参考检出 7fd417fb，位于 cilent-example\FlClash，已 gitignore，仅供对照）整体纳入主工程：lib、plugins、core、services、assets、arb、shaders、tool、windows、android、test 与根构建文件；Dart 包名已改为 floway。
 - 内核源码以子模块形式纳入：core/Clash.Meta，锁定提交 c5062921（即 FlClash v0.9.2 对应的核心提交），.gitmodules 声明 url 与 branch=FlClash。
 - 五入口就位：仪表盘 / 代理 / 配置 / 信息 / 设置（lib/ui/nav.dart；桌面与手机壳共用同一份入口表）。
-- Windows 构建已验证：flutter build windows --debug 首次 360s、增量约 24s，产物 build\windows\x64\runner\Debug\Floway.exe（同目录含 FlClashCore.exe、FlClashHelperService.exe，名称沿用上游）。
-- 工具链：Flutter 3.47.7 / Dart 3.13.5（E:\flutter）、Go（scoop shims）、cargo 1.95、Visual Studio 2022（C++ 桌面工作负载）。
+- **命名与存储路径已剥离 FlClash（2026-11-01 完成）**：
+  - 内核二进制 FlowayCore、协助服务 FlowayHelperService（Windows 服务名、注册表 `HKLM\SYSTEM\CurrentControlSet\Services\FlowayHelperService\Runtime\Port`、命名管道 `\\.\pipe\FlowayCore_*`、Unix socket `/tmp/FlowaySocket_*`、协议头 `x-floway-helper-protocol`、锁文件 `Floway.lock`）。
+  - Android：namespace/applicationId `com.wep56.floway`，包目录 `com/wep56/floway`，`FlowayApplication`，gomobile `-javapkg=com.wep56.floway.core`，深链 `floway://`（保留 clash / clashmeta）。
+  - 数据目录 `%APPDATA%\Floway\Floway`（path_provider 取 exe 版本信息的 CompanyName\ProductName；windows/runner/Runner.rc 已改）。
+  - 更新源 WEP-56/Floway；调试环境变量 FLOWAY_CORE_DEBUG；安装器进程名与清理项同步。
+  - 图标资产已恢复：托盘四态 ico（灰/品牌蓝/TUN 青/安全模式橙）、应用 ico+png、Android 自适应图标（mipmap 前景图 + values-v27/night-v27 splash 指向）。
+  - **刻意保留**的上游字样：lib/views/about.dart 的 GPL 归属（Clash.Meta + chen08209/FlClash）、pubspec description、安装器对旧 `com.follow` 目录的清理。
+- Windows 构建已验证：flutter build windows --debug 约 20～110s，产物 build\windows\x64\runner\Debug\Floway.exe（同目录 FlowayCore.exe、FlowayHelperService.exe）。运行期 IPC 正常（`[APP] IPC Connected`），服务 Running/Automatic，注册表端口与 Rust 侧一致。
+- Android 构建**未验证**：Gradle wrapper 需下载 gradle-9.8.0-all（本地缓存只剩 0 字节 .part），当时用户代理未开、直连 services.gradle.org 超时。开代理后重跑 `flutter build apk --debug` 即可验证包名改动。
+- 工具链：Flutter 3.47.7 / Dart 3.13.5（E:\flutter）、Go（scoop shims，go1.27.3）、cargo 1.95、Visual Studio 2022（C++ 桌面工作负载）。
 
 ## 3. 接线架构（改动前必读）
 
 界面与上游之间只有一层桥接，位置：lib/ui/backend.dart。
 
 - FlvpBackendBinder：应用启动后读上游权威状态，回推给界面的 FlvpDesignStore，并用 ref.listenManual 持续同步；界面动作经 FlvpBackend 接口转成上游动作。上游是唯一真相。
-- 设计页只依赖 FlvpDesignStore，不直接 import 上游 provider；这样预览页与 test/widget_test.dart 不注入后端时仍然可用（因此不要用 ProviderScope 强依赖去改设计页）。
-- FlvpBackend 现有方法：setRunning、setSystemProxy、setTunMode、setMode、setCurrentProfile、addProfileFromLink、deleteProfile、updateProfiles。
-- store 回推方法：syncRunning、syncShortcuts、syncProfiles。store 内导入/删除/刷新/切换先判断 backend 是否注入，注入则转发上游，否则保持演示行为。
-- 已接上游：启动/停止（setupActionProvider.setRunning，状态读 isStartProvider 与 coreStatusProvider）、出站模式（changeMode / patchClashConfigProvider.mode）、系统代理（networkSettingProvider.systemProxy）、TUN（patchClashConfigProvider.tun.enable）、配置列表与当前配置（profilesProvider / currentProfileIdProvider）、配置添加/删除/全部更新（profilesActionProvider）。
-- 未接：代理页策略组与节点与测速、配置编辑与自定义工作区、仪表盘概览（流量、连接数、运行时长等）、信息页四类记录、设置页持久化回写。这些位置仍显示设计稿演示数据。
+- **代理页是例外**：lib/ui/pages/nodes_page.dart 已是 ConsumerStatefulWidget，直接 watch `groupsProvider` / `selectedMapProvider` / `delayProvider` / `delayTestPhaseProvider`，直接调 `proxiesActionProvider`。store 里的 nodes / policyGroups / selectedNodeId / selectNode / testNodes 只服务设计预览（simulate:true）。新增页面优先按这个模式写。
+- 生产入口以 `FlvpDesignStore(simulate: false)` 构造：无演示流量、无演示时长、累计为 0、`currentNode` 在内核未上报时是 `flvpIdleNode`（未选择节点）。演示基数 `flvpHistoryBase` 只在 simulate:true 时叠加。
+- FlvpBackend 方法：setRunning、setSystemProxy、setTunMode、setMode、setCurrentProfile、addProfileFromLink、deleteProfile、updateProfiles、testDelay。
+- store 回推方法：syncRunning、syncShortcuts、syncProfiles、syncDelayTesting、syncTraffic（KB/s，含曲线采样，首帧清演示波形）、syncTotals（GB）、syncUptime（秒）、syncCurrentNode。
+- 已接上游：启动/停止、出站模式、系统代理、TUN 开关、配置列表与当前配置、配置增删与全部更新、**代理页策略组/节点/切换/单点测速/整体测速**、**仪表盘状态/时长/延迟/订阅/上下行速度与曲线/累计流量/出口 IP 卡片**。
+- 未接：配置编辑与自定义工作区、信息页四类记录、设置页持久化回写、仪表盘其余卡片（连接统计、内网 IP、服务状态、内存、网络接管）。
 
 ## 4. 上游入口速查
 
 - 内核与状态：isStartProvider、coreStatusProvider、setupActionProvider.setRunning/changeMode、patchClashConfigProvider.mode/tun.enable、networkSettingProvider.systemProxy。
 - 配置：profilesProvider、currentProfileIdProvider、profilesActionProvider（putProfile / addProfileFromLink / deleteProfile / updateProfile / autoUpdateProfiles / readCustomImport / importCustomProfile）。
-- 代理（待接）：lib/providers/state/proxies.dart、lib/providers/actions/proxies.dart、lib/views/proxies/。
-- 仪表盘组件基准：lib/views/dashboard/widgets/（traffic、connection_stats、proxy_groups、intranet_ip、service_status、memory_info、network_takeover、core_status_button）。
-- 免责声明：启动弹窗已移除（lib/bootstrap.dart 删掉 import、调用与两个成员，33 行）；lib/views/disclaimer.dart 仍作为工具/关于页的手动入口保留，acceptedDisclaimerVersion 与 disclaimerVersion 为残留设置项。
+- 代理：groupsProvider（List<Group>，Group 有 type/all/now/testUrl/name）、selectedMapProvider（Map<String,String>）、delayProvider(proxyName:)、delayTestPhaseProvider(proxyName:)、delayTestingGroupsProvider（Set<String>）、proxiesActionProvider（changeProxyDebounce / proxyDelayTest / delayTestGroups / delayTestPageGroup）。
+- **延迟语义**：>0 才是真值；`-1` == delayTimedOutValue 表示超时；其他负数表示失败。显示前必须判 `<= 0`，否则会把 -1 当成 1ms 显示成绿色。
+- 流量与时长：trafficsProvider（FixedList<Traffic>，字节/秒，取 `[length-1]`）、totalTrafficProvider（Traffic，字节）、runTimeProvider（int?，**毫秒**）、isStartProvider。
+- 出口信息：outboundIpProbeProvider（`.watch/.unwatch/.refresh(const [routedOutbound])`，`entryOf(routedOutbound).value` → IpInfo）、ipQualityProvider(ip) → IpQuality（organization / type / level，负数场景见上）。
+- 仪表盘组件基准：lib/views/dashboard/widgets/（traffic、connection_stats、proxy_groups、intranet_ip、service_status、memory_info、network_takeover、core_status_button、current_outbound）。
+- 免责声明：启动弹窗已移除（lib/bootstrap.dart）；lib/views/disclaimer.dart 仍作为工具/关于页的手动入口保留。
 
 ## 5. 构建与启动（Windows）
 
@@ -46,31 +59,41 @@
 2. flutter pub get
 3. flutter run -d windows 或 flutter build windows --debug
 
-内核（Go）与管理员协助进程（Rust）由 setup 构建钩子在 flutter build/run 期间自动编译，不需要单独执行；dart setup.dart windows 是打包入口（产出 exe/zip 发行物），内部同样调用 flutter build，日常开发不必先跑。
-Android 需要 Android SDK/NDK 与 Go 工具链，本轮未验证。
+内核（Go）与管理员协助进程（Rust）由 setup 构建钩子在 flutter build/run 期间自动编译（build_config.yaml 的 core_name/helper_name 决定产物名），不需要单独执行；dart setup.dart windows 是打包入口。
+改了二进制名之后，build\windows\x64\runner\Debug 里可能残留旧的 FlClashCore.exe / FlClashHelperService.exe，需要手动删；改应用名后若报 No target，删 build\windows 重配。
+Android 需要 Android SDK/NDK、Go 工具链与可用的 Gradle 下载链路，本轮未验证。
 
 ## 6. 环境与踩坑（血泪部分）
 
-- 设备执行：DeviceInvoke 的 script.shell，cwd=D:\FLVPcore，单次上限 120s。长任务（构建、克隆、推送）必须用 Invoke-CimMethod Win32_Process Create 起独立进程并写日志轮询，否则会在返回时被杀。
-- PowerShell 陷阱：$ErrorActionPreference='Stop' 会把 git/flutter 的 stderr 当终结错误，push 与 analyze 必须单独用 'Continue' 调用；单引号 here-string 内不要写 ''x'' 这种双写转义（会原样写进 Dart 源码）；rd 是 Remove-Item 的别名，函数不得同名；$host 是保留变量。文件改写统一用 ReadTextFile / WriteTextFile / ReplaceExact，ReplaceExact 带命中数断言。
-- 应用目标名：windows 侧 BINARY_NAME 与 project 均为 Floway。CMake 只在首次配置时把 CMAKE_INSTALL_PREFIX 写成 $<TARGET_FILE_DIR:目标名> 存进缓存，改过应用名后旧缓存会报 No target，必须删掉 build\windows（或 flutter clean）再构建。
+- 设备执行：长任务（构建、克隆、推送）必须放后台作业并轮询，否则会在返回时被杀。
+- **PowerShell 批量替换陷阱**：把替换对写成函数并用 `@(@("a","b"))` 传参会**被摊平成两个独立参数**，退化成"首字符→次字符"式的单字符替换，能静默毁掉整个文件（本轮曾把 changelog.dart、request.dart、clash_config.dart、certificate.go 改坏）。批量改名一律用显式 `.Replace` 链或 `[string[]]$from / [string[]]$to` 并行数组，改完用 `git diff --numstat` 核对每处命中数。
+- **material_ui 分裂**：Flutter 3.47 把 Material 拆成 package:material_ui。Floway 页面必须 `import 'package:material_ui/material_ui.dart'`；与 flutter/material 混用会抛 `No MaterialLocalizations found.`（本轮统一了 17 个文件）。
+- **setState during build**：`ref.listenManual` 里同步 `notifyListeners()` 会撞上 "setState() or markNeedsBuild() called during build"，尤其是 `fireImmediately: true` 和上游在构建期推 groups 的场景。回推 store 一律 `WidgetsBinding.instance.addPostFrameCallback`。
+- 布局：Floway 页面挂在壳的 SingleChildScrollView 里，不能用 `Expanded`（用 ConstrainedBox(minHeight:) 撑高）；Scrollbar 与 SingleChildScrollView 必须共用同一个 controller，否则报 "ScrollController has no ScrollPosition attached"。
+- FlvpIcon 只有 46 个图标名，未知名会 assert 崩溃（没有 ArrowRight、Waypoints；可用 Route、Network、Zap、Search、X 等），新页面用图标前先查 lib/ui/icons/flvp_icons.dart。
 - 依赖：必须沿用仓库根的 pubspec.lock。重新解析会把 material_ui 升到高版本，与 material_new_shapes 冲突，产生成片 ambiguous_import。
 - 验证闸门：flutter analyze --no-pub lib 与 --no-pub test 必须无问题；flutter test 需要 Go 与内核源码才能生成原生资产。
-- 推送：github push 可能因链路问题失败（curl 55 连接重置、HTTP 408、TLS unexpected eof），而 ls-remote 正常；git 配了 http.proxy=http://127.0.0.1:7897；已用 gh auth setup-git 让 gh 接管 github.com 凭据（已登录 WEP-56、含 repo）。推不动时先查代理链路，勿重建提交。
+- 推送：github push 可能因链路问题失败（curl 55、HTTP 408、TLS unexpected eof），git 配了 http.proxy=http://127.0.0.1:7897，gh 已接管 github.com 凭据。推不动时先查代理链路，勿重建提交。
+- UI 自动化：用 Win32 `PrintWindow(hwnd, hdc, 2)` 抓窗口内容不抢焦点；`PostMessage/SendMessage` 发鼠标消息对 Flutter 无效（点不动），需要用户手动点。
 
 ## 7. 提交与推送状态
 
-- 远端 main 目前停在 b88984d（含运行基础、打包名称链、核心子模块、启动接线与配置列表）。
-- 本地待推送：2c98413（构建启动文档）、f506fc5（移除启动免责声明）、90966ad（配置页增删改接线）、be16d5c（TODO 进度）。
-- 推送命令：git push origin main；工作区应保持干净。
+- 本轮提交内容：命名与存储路径剥离 FlClash + 图标资产恢复 + 代理页与仪表盘接上游数据（含出口 IP 卡片、测速反馈、延迟负值语义、演示数据清出生产路径）。
+- 推送：git push origin main（远端 https://github.com/WEP-56/Floway.git）。工作区应保持干净。
 
-## 8. 下一步（按 TODO.md 批次）
+## 8. 下一步（用户指定顺序）
 
-- 批次1（已完成）：运行基础、五入口、启动/停止与模式/系统代理/TUN 接线。
-- 批次2（进行中）：配置页添加/删除/全部更新已接；余 PROFILE-13～16 的编辑、源码与覆写、完整自定义工作区；代理页 PROXY-01～10（策略组与节点、切换、测速）未开始。参考 lib/views/profiles/edit.dart 与 lib/views/proxies/。
-- 批次3（未开始）：DASH 概览（流量、配置摘要、策略组摘要、连接统计、内网 IP、服务状态、内存、网络接管）与 INFO 四类记录。
-- 批次4（未开始）：SET 设置持久化回写与上游入口补齐。
-- 批次5（未开始）：平台裁剪、品牌与整体验收。
+按 **配置页 → 设置页 → 信息页** 推进：
+
+1. 配置页：PROFILE-13～16 —— 配置编辑、源码与覆写、完整自定义工作区；参考 lib/views/profiles/edit.dart。
+2. 设置页：SET 系列 —— 设置项持久化回写与上游入口补齐（当前设置页多数开关只改 store，没有落盘）。
+3. 信息页：INFO-03～10 —— 连接/日志/请求/规则四类记录，参考 lib/views/ 下对应视图。
+4. 仪表盘其余卡片：连接统计、内网 IP、服务状态、内存、网络接管（DASH 系列）。
+
+已知待办（非本轮）：
+- Android 构建验证（需开代理让 Gradle 下载发行包）。
+- TUN 实测（helper 与 core 已就绪，尚未在开启连接的状态下验证虚拟网卡与路由）。
+- 旧数据目录 `%APPDATA%\com.follow\Floway` 仍在（用户明确不迁移）。
 
 ## 9. 验证约定
 

@@ -191,7 +191,7 @@ void main() {
   test('core interface sends structured request parameters', () async {
     final handler = _RecordingCoreHandler();
 
-    await handler.init(const InitParams(homeDir: '/tmp/flclash', version: 35));
+    await handler.init(const InitParams(homeDir: '/tmp/floway', version: 35));
     await handler.setupConfig(
       const SetupParams(selectedMap: {'GLOBAL': 'DIRECT'}, testUrl: 'test'),
     );

@@ -3,10 +3,10 @@ import 'package:floway/models/changelog.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 String _body(String payload) =>
-    '<!-- flclash:changelog:begin -->\n'
+    '<!-- floway:changelog:begin -->\n'
     '### Features\n'
     '- Override scripts\n'
-    '<!-- flclash:changelog:end -->\n'
+    '<!-- floway:changelog:end -->\n'
     '\n'
     '$releaseChangelogJsonMarker\n'
     '$payload\n'

@@ -60,7 +60,7 @@ void main() {
   late Exception? reloadError;
 
   setUpAll(() async {
-    home = Directory.systemTemp.createTempSync('flclash-providers-action-');
+    home = Directory.systemTemp.createTempSync('floway-providers-action-');
     await useAppPaths(home);
   });
 

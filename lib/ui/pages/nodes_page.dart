@@ -1,71 +1,110 @@
-import 'package:flutter/material.dart';
+import 'package:floway/models/models.dart';
+import 'package:floway/providers/providers.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../design/motion.dart';
 import '../design/theme_scope.dart';
 import '../icons/flvp_icon.dart';
-import '../store/design_store.dart';
-import '../store/models.dart';
-import '../store/store_scope.dart';
 import '../widgets/data_display.dart';
 import '../widgets/feedback.dart';
 import '../widgets/ripple.dart';
 import '../widgets/surfaces.dart';
 
-const _all = '全部';
-
-/// pages/Nodes.tsx
-class FlvpNodesPage extends StatefulWidget {
+/// pages/Nodes.tsx — 策略组与组内节点，数据全部来自上游 `groupsProvider`。
+///
+/// 搜索框在左、策略组小选择块在右（横向可滚，点边缘的块自动滚入视野）；
+/// 下方只列当前策略组的成员：点行切换该组的选中节点，点延迟数字单独测速。
+class FlvpNodesPage extends ConsumerStatefulWidget {
   const FlvpNodesPage({super.key, required this.platform});
 
   final FlvpPlatform platform;
 
   @override
-  State<FlvpNodesPage> createState() => _FlvpNodesPageState();
+  ConsumerState<FlvpNodesPage> createState() => _FlvpNodesPageState();
 }
 
-class _FlvpNodesPageState extends State<FlvpNodesPage> {
+class _FlvpNodesPageState extends ConsumerState<FlvpNodesPage> {
   final TextEditingController _query = TextEditingController();
-  String _group = _all;
+  final ScrollController _chipScroll = ScrollController();
+  final Map<String, GlobalKey> _chipKeys = {};
+
+  String? _groupName;
 
   @override
   void dispose() {
     _query.dispose();
+    _chipScroll.dispose();
     super.dispose();
+  }
+
+  void _selectGroup(String name) {
+    setState(() => _groupName = name);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final chipContext = _chipKeys[name]?.currentContext;
+      if (chipContext == null) return;
+      // 点边缘的策略组时把它滚到视野中间，和设计稿的横向滑动一致。
+      Scrollable.ensureVisible(
+        chipContext,
+        alignment: 0.5,
+        duration: FlvpMotion.control,
+        curve: Curves.easeOut,
+      );
+    });
   }
 
   @override
   Widget build(BuildContext context) {
-    final store = FlvpStoreScope.of(context);
     final colors = FlvpThemeScope.colorsOf(context);
     final mobile = widget.platform == FlvpPlatform.mobile;
-    final allGroups = <String>[];
-    for (final node in store.nodes) {
-      if (!allGroups.contains(node.sub)) allGroups.add(node.sub);
-    }
-    final keyword = _query.text.trim().toLowerCase();
-    final groups = <String, List<NodeInfo>>{};
-    for (final node in store.nodes) {
-      if (_group != _all && node.sub != _group) continue;
-      if (keyword.isNotEmpty &&
-          !node.name.toLowerCase().contains(keyword) &&
-          !node.proto.toLowerCase().contains(keyword)) {
-        continue;
-      }
-      groups.putIfAbsent(node.sub, () => []).add(node);
-    }
+    final groups = ref.watch(groupsProvider);
+    final selectedMap = ref.watch(selectedMapProvider);
+    final testing = ref.watch(delayTestingGroupsProvider).isNotEmpty;
 
-    final chips = [
-      for (final group in [_all, ...allGroups])
-        FlvpChip(
-          label: group,
-          selected: _group == group,
-          onTap: () => setState(() => _group = group),
-        ),
-    ];
+    final current = groups.where((g) => g.name == _groupName).firstOrNull ??
+        groups.firstOrNull;
+
+
+    final keyword = _query.text.trim().toLowerCase();
+    final members = current == null
+        ? const <Proxy>[]
+        : [
+            for (final proxy in current.all)
+              if (keyword.isEmpty ||
+                  proxy.name.toLowerCase().contains(keyword) ||
+                  proxy.type.toLowerCase().contains(keyword))
+                proxy,
+          ];
+    final selectedName = current == null
+        ? ''
+        : current.getCurrentSelectedName(selectedMap[current.name] ?? '');
+
     final search = _SearchBar(
       controller: _query,
       onChanged: (_) => setState(() {}),
       width: mobile ? null : 300,
+    );
+
+    final chips = [
+      for (final group in groups)
+        FlvpChip(
+          key: _chipKeys.putIfAbsent(group.name, () => GlobalKey()),
+          label: group.name,
+          selected: group.name == current?.name,
+          onTap: () => _selectGroup(group.name),
+        ),
+    ];
+
+    final chipStrip = SizedBox(
+      height: 32,
+      child: ScrollConfiguration(
+        behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
+        child: SingleChildScrollView(
+          controller: _chipScroll,
+          scrollDirection: Axis.horizontal,
+          child: Row(spacing: 8, children: chips),
+        ),
+      ),
     );
 
     return LayoutBuilder(
@@ -75,96 +114,37 @@ class _FlvpNodesPageState extends State<FlvpNodesPage> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           spacing: 20,
           children: [
-            if (store.policyGroups.isNotEmpty) ...[
-              Text(
-                '规则模式按策略组分流；下方节点选择用于全局模式。',
-                style: flvpText(12, color: colors.ink3),
-              ),
-              for (final group in store.policyGroups)
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  spacing: 6,
-                  children: [
-                    Text(
-                      '${group.name} · ${group.type}',
-                      style: flvpText(13, color: colors.ink2),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    if (group.type == 'select')
-                      DropdownButtonFormField<String>(
-                        key: ValueKey('${group.id}:${group.selectedId}'),
-                        initialValue: group.selectedId,
-                        isExpanded: true,
-                        decoration: const InputDecoration(
-                          isDense: true,
-                          border: OutlineInputBorder(),
-                        ),
-                        items: [
-                          for (final member in group.members.entries)
-                            DropdownMenuItem(
-                              value: member.key,
-                              child: Text(
-                                member.value,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                        ],
-                        onChanged: (value) {
-                          if (value != null) {
-                            store.selectGroupMember(group.id, value);
-                          }
-                        },
-                      )
-                    else
-                      Text(
-                        '${group.members.length} 个成员 · 内核自动选择',
-                        style: flvpText(12, color: colors.ink3),
-                      ),
-                  ],
-                ),
-            ],
             if (mobile)
               Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 spacing: 12,
-                children: [
-                  search,
-                  // `-mx-4 overflow-x-auto px-4`: the chip strip bleeds into
-                  // the page gutter and scrolls edge to edge.
-                  SizedBox(
-                    height: 32,
-                    child: OverflowBox(
-                      alignment: Alignment.centerLeft,
-                      minWidth: constraints.maxWidth + 32,
-                      maxWidth: constraints.maxWidth + 32,
-                      child: Transform.translate(
-                        offset: const Offset(-16, 0),
-                        child: ScrollConfiguration(
-                          behavior: ScrollConfiguration.of(context)
-                              .copyWith(scrollbars: false),
-                          child: SingleChildScrollView(
-                            scrollDirection: Axis.horizontal,
-                            padding: const EdgeInsets.symmetric(horizontal: 16),
-                            child: Row(spacing: 8, children: chips),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
+                children: [search, chipStrip],
               )
             else
-              Wrap(
-                crossAxisAlignment: WrapCrossAlignment.center,
-                spacing: 12,
-                runSpacing: 12,
+              Row(
                 children: [
                   search,
-                  Wrap(spacing: 8, runSpacing: 8, children: chips),
+                  const SizedBox(width: 12),
+                  Expanded(child: chipStrip),
                 ],
               ),
-            if (store.testing) const FlvpWavyProgress(),
+            if (testing) const FlvpWavyProgress(),
             if (groups.isEmpty)
+              FlvpCard(
+                padding: const EdgeInsets.symmetric(vertical: 56, horizontal: 24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  spacing: 12,
+                  children: [
+                    FlvpIcon('Network', size: 26, color: colors.ink3),
+                    Text(
+                      '启动代理后这里显示策略组',
+                      style: flvpText(13.5, color: colors.ink3),
+                    ),
+                  ],
+                ),
+              )
+            else if (members.isEmpty)
               FlvpCard(
                 padding: const EdgeInsets.symmetric(vertical: 56),
                 child: Column(
@@ -182,24 +162,25 @@ class _FlvpNodesPageState extends State<FlvpNodesPage> {
                     ),
                   ],
                 ),
+              )
+            else ...[
+              FlvpSectionLabel(
+                title: current!.name,
+                trailing: Text(
+                  '${members.length} 个节点 · ${_groupTypeLabel(current)}',
+                  style: flvpText(12, color: colors.ink3),
+                ),
               ),
-            for (final entry in groups.entries)
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  FlvpSectionLabel(
-                    title: entry.key,
-                    trailing: Text(
-                      '${entry.value.length} 个节点',
-                      style: flvpText(12, color: colors.ink3),
-                    ),
-                  ),
-                  FlvpCard(
-                    padding: const EdgeInsets.all(6),
-                    child: _nodeGrid(store, entry.value, twoColumns),
-                  ),
-                ],
+              FlvpCard(
+                padding: const EdgeInsets.all(6),
+                child: _nodeGrid(
+                  members,
+                  twoColumns,
+                  current: current,
+                  selectedName: selectedName,
+                ),
               ),
+            ],
           ],
         );
       },
@@ -207,17 +188,16 @@ class _FlvpNodesPageState extends State<FlvpNodesPage> {
   }
 
   Widget _nodeGrid(
-    FlvpDesignStore store,
-    List<NodeInfo> nodes,
-    bool twoColumns,
-  ) {
-    Widget row(NodeInfo node) => _NodeRow(
-      node: node,
-      selected: node.id == store.selectedNodeId,
-      testing: store.testing,
-      onSelect: () => store.selectNode(node.id),
+    List<Proxy> nodes,
+    bool twoColumns, {
+    required Group current,
+    required String selectedName,
+  }) {
+    Widget row(Proxy node) => _NodeRow(
+      proxy: node,
+      groupName: current.name,
+      selected: node.name == selectedName,
     );
-    // `@3xl:grid-cols-2 @3xl:[&>:only-child]:col-span-2`, gap-0.5.
     if (!twoColumns || nodes.length < 2) {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -245,6 +225,15 @@ class _FlvpNodesPageState extends State<FlvpNodesPage> {
       ],
     );
   }
+
+  String _groupTypeLabel(Group group) => switch (group.type.name) {
+    'select' => '手动选择',
+    'urlTest' => '延迟最低优先',
+    'fallback' => '故障转移',
+    'loadBalance' => '负载均衡',
+    'relay' => '链式代理',
+    _ => group.type.name,
+  };
 }
 
 class _SearchBar extends StatefulWidget {
@@ -263,120 +252,74 @@ class _SearchBar extends StatefulWidget {
 }
 
 class _SearchBarState extends State<_SearchBar> {
-  final FocusNode _focus = FocusNode();
-
-  @override
-  void dispose() {
-    _focus.dispose();
-    super.dispose();
-  }
-
   @override
   Widget build(BuildContext context) {
     final colors = FlvpThemeScope.colorsOf(context);
-    return AnimatedBuilder(
-      animation: Listenable.merge([_focus, widget.controller]),
-      builder: (context, _) => AnimatedContainer(
-        duration: FlvpMotion.control,
-        width: widget.width,
-        height: 48,
-        padding: const EdgeInsets.only(left: 16, right: 6),
-        decoration: BoxDecoration(
-          color: colors.surf2,
-          borderRadius: BorderRadius.circular(999),
-        ),
-        foregroundDecoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(999),
-          border: Border.all(
-            color: _focus.hasFocus ? colors.primary : const Color(0x00000000),
-            width: 2,
-          ),
-        ),
-        child: Row(
-          children: [
-            FlvpIcon('Search', size: 18, color: colors.ink2),
-            const SizedBox(width: 12),
-            Expanded(
-              child: TextField(
-                controller: widget.controller,
-                focusNode: _focus,
-                onChanged: widget.onChanged,
-                maxLines: 1,
-                cursorColor: colors.primary,
-                style: flvpText(14, weight: FontWeight.w400, color: colors.ink),
-                decoration: InputDecoration(
-                  isCollapsed: true,
-                  border: InputBorder.none,
-                  hintText: '搜索节点或协议',
-                  hintStyle: flvpText(
-                    14,
-                    weight: FontWeight.w400,
-                    color: colors.ink3,
-                  ),
-                ),
+    final field = Container(
+      height: 40,
+      padding: const EdgeInsets.symmetric(horizontal: 14),
+      decoration: BoxDecoration(
+        color: colors.surf2,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        children: [
+          FlvpIcon('Search', size: 16, color: colors.ink3),
+          const SizedBox(width: 10),
+          Expanded(
+            child: TextField(
+              controller: widget.controller,
+              onChanged: widget.onChanged,
+              style: flvpText(13.5, color: colors.ink),
+              cursorColor: colors.primary,
+              decoration: InputDecoration(
+                isDense: true,
+                border: InputBorder.none,
+                hintText: '搜索节点或协议',
+                hintStyle: flvpText(13.5, color: colors.ink3),
               ),
             ),
-            if (widget.controller.text.isNotEmpty)
-              FlvpHover(
-                builder: (context, hovered) => GestureDetector(
-                  onTap: () {
-                    widget.controller.clear();
-                    widget.onChanged('');
-                  },
-                  child: Semantics(
-                    button: true,
-                    label: '清除',
-                    child: AnimatedContainer(
-                      duration: FlvpMotion.hover,
-                      width: 36,
-                      height: 36,
-                      alignment: Alignment.center,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: hovered
-                            ? colors.inkLayer()
-                            : const Color(0x00000000),
-                      ),
-                      child: FlvpIcon('X', size: 16, color: colors.ink2),
-                    ),
-                  ),
-                ),
-              ),
-          ],
-        ),
+          ),
+          if (widget.controller.text.isNotEmpty)
+            GestureDetector(
+              onTap: () {
+                widget.controller.clear();
+                widget.onChanged('');
+              },
+              child: FlvpIcon('X', size: 15, color: colors.ink3),
+            ),
+        ],
       ),
     );
+    return widget.width == null ? field : SizedBox(width: widget.width, child: field);
   }
 }
 
-class _NodeRow extends StatelessWidget {
+class _NodeRow extends ConsumerWidget {
   const _NodeRow({
-    required this.node,
+    required this.proxy,
+    required this.groupName,
     required this.selected,
-    required this.testing,
-    required this.onSelect,
   });
 
-  final NodeInfo node;
+  final Proxy proxy;
+  final String groupName;
   final bool selected;
-  final bool testing;
-  final VoidCallback onSelect;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final colors = FlvpThemeScope.colorsOf(context);
-    final special = switch (node.id) {
-      'auto' => 'Zap',
-      'home' => 'House',
-      'office' => 'Building2',
-      _ => null,
-    };
+    final delay = ref.watch(delayProvider(proxyName: proxy.name));
+    final testing = ref.watch(delayTestPhaseProvider(proxyName: proxy.name)) != null;
+
     return FlvpHover(
       builder: (context, hovered) => FlvpRipple(
         color: selected ? colors.onpcontainer : colors.ink,
         borderRadius: BorderRadius.circular(18),
         child: GestureDetector(
-          onTap: onSelect,
+          onTap: () => ref
+              .read(proxiesActionProvider.notifier)
+              .changeProxyDebounce(groupName, proxy.name),
           child: AnimatedContainer(
             duration: FlvpMotion.shape,
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
@@ -398,21 +341,7 @@ class _NodeRow extends StatelessWidget {
                     color: selected ? colors.primary : colors.surf2,
                     borderRadius: BorderRadius.circular(14),
                   ),
-                  child: special != null
-                      ? FlvpIcon(
-                          special,
-                          size: 17,
-                          color: selected ? colors.onprimary : colors.ink2,
-                        )
-                      : Text(
-                          node.region,
-                          style: flvpText(
-                            12,
-                            weight: FontWeight.w700,
-                            letterSpacing: 0.3,
-                            color: selected ? colors.onprimary : colors.ink2,
-                          ),
-                        ),
+                  child: _glyph(proxy, selected ? colors.onprimary : colors.ink2),
                 ),
                 Expanded(
                   child: Column(
@@ -420,7 +349,7 @@ class _NodeRow extends StatelessWidget {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Text(
-                        node.name,
+                        proxy.name,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: flvpText(
@@ -430,7 +359,7 @@ class _NodeRow extends StatelessWidget {
                       ),
                       const SizedBox(height: 2),
                       Text(
-                        node.proto,
+                        proxy.type.toUpperCase(),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: flvpText(
@@ -444,8 +373,105 @@ class _NodeRow extends StatelessWidget {
                     ],
                   ),
                 ),
-                FlvpLatencyBadge(ms: node.latency, testing: testing),
+                _DelayButton(
+                  delay: delay,
+                  testing: testing,
+                  onTap: () => ref
+                      .read(proxiesActionProvider.notifier)
+                      .proxyDelayTest(proxy),
+                ),
               ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _glyph(Proxy proxy, Color color) {
+    final name = proxy.name.toUpperCase();
+    final icon = switch (name) {
+      'DIRECT' || 'REJECT' || 'PASS' => 'Route',
+      _ when name.contains('自动') || proxy.type == 'URLTest' => 'Zap',
+      _ => null,
+    };
+    if (icon != null) return FlvpIcon(icon, size: 17, color: color);
+    final label = proxy.name.runes.length >= 2
+        ? String.fromCharCodes(proxy.name.runes.take(2))
+        : proxy.name;
+    return Text(
+      label,
+      style: flvpText(
+        12,
+        weight: FontWeight.w700,
+        letterSpacing: 0.3,
+        color: color,
+      ),
+    );
+  }
+}
+
+/// 单点测速按钮：测速时给转圈和底色，平时显示延迟数字。
+class _DelayButton extends StatelessWidget {
+  const _DelayButton({
+    required this.delay,
+    required this.testing,
+    required this.onTap,
+  });
+
+  final int? delay;
+  final bool testing;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = FlvpThemeScope.colorsOf(context);
+    return Tooltip(
+      message: testing ? '正在测速' : '点击测速',
+      waitDuration: const Duration(milliseconds: 400),
+      child: FlvpHover(
+        builder: (context, hovered) => FlvpRipple(
+          color: colors.ink,
+          borderRadius: BorderRadius.circular(10),
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: testing ? null : onTap,
+            child: AnimatedContainer(
+              duration: FlvpMotion.control,
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color: testing
+                    ? colors.pcontainer
+                    : (hovered ? colors.inkHover() : const Color(0x00000000)),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: AnimatedSwitcher(
+                duration: FlvpMotion.control,
+                child: testing
+                    ? Row(
+                        key: const ValueKey('testing'),
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          SizedBox(
+                            width: 12,
+                            height: 12,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: colors.primary,
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            '测速中',
+                            style: flvpText(12, color: colors.primary),
+                          ),
+                        ],
+                      )
+                    : FlvpLatencyBadge(
+                        key: const ValueKey('idle'),
+                        ms: delay,
+                      ),
+              ),
             ),
           ),
         ),

@@ -134,8 +134,8 @@ void main() {
     // AboutView reads globalState.packageInfo, which only the real app bootstrap
     // populates.
     globalState.packageInfo = PackageInfo(
-      appName: 'FlClash',
-      packageName: 'com.follow.clash',
+      appName: 'Floway',
+      packageName: 'com.wep56.floway',
       version: '0.0.0',
       buildNumber: '1',
     );

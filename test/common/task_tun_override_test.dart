@@ -34,7 +34,7 @@ Future<YamlMap> _tunOf({
       proxyGroups: const [],
       rules: const [],
       addedRules: const [],
-      defaultUA: 'FlClash-Test',
+      defaultUA: 'Floway-Test',
     ),
   );
   final config = loadYaml(result.yaml) as YamlMap;

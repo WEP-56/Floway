@@ -36,8 +36,8 @@ void main(List<String> args) {
         await RustLib.init();
         final version = await system.init();
         final container = await bootstrap.init(version);
-        await FlClashHttpOverrides.trustCoreRoots();
-        HttpOverrides.global = FlClashHttpOverrides(container);
+        await FlowayHttpOverrides.trustCoreRoots();
+        HttpOverrides.global = FlowayHttpOverrides(container);
         request.attach(container.read);
         runApp(
           UncontrolledProviderScope(

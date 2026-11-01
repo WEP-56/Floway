@@ -8,10 +8,10 @@ import 'package:floway/providers/state.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-class FlClashHttpOverrides extends HttpOverrides {
+class FlowayHttpOverrides extends HttpOverrides {
   final ProviderContainer _container;
 
-  FlClashHttpOverrides(this._container);
+  FlowayHttpOverrides(this._container);
 
   static const _coreRootsAsset =
       'core/Clash.Meta/component/ca/ca-certificates.crt';

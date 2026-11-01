@@ -48,7 +48,7 @@ void main() {
 
   setUpAll(() async {
     registerFallbackValue(0);
-    home = Directory.systemTemp.createTempSync('flclash-store-');
+    home = Directory.systemTemp.createTempSync('floway-store-');
     await useAppPaths(home);
   });
 

@@ -70,7 +70,7 @@ void main() {
   setUpAll(() async {
     await initEditorNative();
     core = _MockCoreHandlerInterface();
-    home = Directory.systemTemp.createTempSync('flclash-providers-');
+    home = Directory.systemTemp.createTempSync('floway-providers-');
   });
 
   setUp(() => reset(core));

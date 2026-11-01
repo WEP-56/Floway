@@ -32,10 +32,10 @@ class BuildConfig {
     goLdflags: '-w -s',
     coreVersion: '',
     coreDir: 'core',
-    coreName: 'FlClashCore',
+    coreName: 'FlowayCore',
     outputDir: 'libclash',
     helperDir: 'services/helper',
-    helperName: 'FlClashHelperService',
+    helperName: 'FlowayHelperService',
   );
 
   static BuildConfig load({required String rootDir}) {

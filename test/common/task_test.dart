@@ -11,12 +11,12 @@ import 'package:yaml/yaml.dart';
 void main() {
   test('encoding helpers round-trip structured data', () async {
     final encoded = jsonEncode({
-      'name': 'FlClash',
+      'name': 'Floway',
       'values': [1, true, null],
     });
     final decoded = await decodeJSONTask<Map<String, dynamic>>(encoded);
 
-    expect(decoded['name'], 'FlClash');
+    expect(decoded['name'], 'Floway');
     expect(decoded['values'], [1, true, null]);
     expect(await encodeYamlTask({'enabled': true}), contains('enabled: true'));
   });
@@ -196,7 +196,7 @@ void main() {
               ruleTarget: 'MATCH',
             ),
           ],
-          defaultUA: 'FlClash-Test',
+          defaultUA: 'Floway-Test',
         ),
       );
       final config = loadYaml(result.yaml) as YamlMap;
@@ -204,7 +204,7 @@ void main() {
       expect(result.md5, hasLength(32));
       expect(config['mixed-port'], 7893);
       expect(config['allow-lan'], true);
-      expect(config['global-ua'], 'FlClash-Test');
+      expect(config['global-ua'], 'Floway-Test');
       expect(config['profile']['store-selected'], false);
       expect(
         config['dns']['nameserver'],
@@ -261,7 +261,7 @@ void main() {
             ruleTarget: 'MATCH',
           ),
         ],
-        defaultUA: 'FlClash-Test',
+        defaultUA: 'Floway-Test',
         matchTarget: 'HK',
       );
 
@@ -304,7 +304,7 @@ void main() {
           proxyGroups: const [],
           rules: const [],
           addedRules: const [],
-          defaultUA: 'FlClash-Test',
+          defaultUA: 'Floway-Test',
         ),
       );
       final config = loadYaml(result.yaml) as YamlMap;
@@ -331,7 +331,7 @@ void main() {
       proxyGroups: const [],
       rules: const [],
       addedRules: const [],
-      defaultUA: 'FlClash-Test',
+      defaultUA: 'Floway-Test',
       authentication: const ['user:pass'],
     );
 
@@ -413,7 +413,7 @@ void main() {
         proxyGroups: const [],
         rules: const [],
         addedRules: const [],
-        defaultUA: 'FlClash-Test',
+        defaultUA: 'Floway-Test',
       ),
     );
     final config = loadYaml(result.yaml) as YamlMap;
@@ -444,7 +444,7 @@ void main() {
           proxyGroups: const [],
           rules: const [],
           addedRules: const [],
-          defaultUA: 'FlClash-Test',
+          defaultUA: 'Floway-Test',
           safeMode: safeMode,
         ),
       );
@@ -481,7 +481,7 @@ void main() {
             proxyGroups: const [],
             rules: const [],
             addedRules: const [],
-            defaultUA: 'FlClash-Test',
+            defaultUA: 'Floway-Test',
             safeMode: safeMode,
           ),
         );
@@ -510,7 +510,7 @@ void main() {
             proxyGroups: const [],
             rules: const [],
             addedRules: const [],
-            defaultUA: 'FlClash-Test',
+            defaultUA: 'Floway-Test',
           ),
         );
         return loadYaml(result.yaml) as YamlMap;
@@ -571,7 +571,7 @@ void main() {
             proxyGroups: const [],
             rules: const [],
             addedRules: const [],
-            defaultUA: 'FlClash-Test',
+            defaultUA: 'Floway-Test',
             safeMode: safeMode,
           ),
         );
@@ -630,7 +630,7 @@ void main() {
           proxyGroups: const [],
           rules: const [],
           addedRules: const [],
-          defaultUA: 'FlClash-Test',
+          defaultUA: 'Floway-Test',
         ),
       );
       final config = loadYaml(result.yaml) as YamlMap;
@@ -663,7 +663,7 @@ void main() {
           proxyGroups: const [],
           rules: const [],
           addedRules: const [],
-          defaultUA: 'FlClash-Test',
+          defaultUA: 'Floway-Test',
         ),
       );
       return loadYaml(result.yaml) as YamlMap;
@@ -714,7 +714,7 @@ void main() {
           proxyGroups: const [],
           rules: const [],
           addedRules: const [],
-          defaultUA: 'FlClash-Test',
+          defaultUA: 'Floway-Test',
         ),
       );
       return loadYaml(result.yaml) as YamlMap;
@@ -811,7 +811,7 @@ void main() {
           proxyGroups: const [],
           rules: const [],
           addedRules: const [],
-          defaultUA: 'FlClash-Test',
+          defaultUA: 'Floway-Test',
         ),
       );
       final config = loadYaml(result.yaml) as YamlMap;

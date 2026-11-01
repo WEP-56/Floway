@@ -107,7 +107,7 @@ void main() {
   late Directory home;
 
   setUpAll(() async {
-    home = Directory.systemTemp.createTempSync('flclash-rule-sets-view-');
+    home = Directory.systemTemp.createTempSync('floway-rule-sets-view-');
     await useAppPaths(home);
   });
 

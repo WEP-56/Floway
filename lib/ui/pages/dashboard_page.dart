@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 import '../design/motion.dart';
 import '../design/theme_scope.dart';
@@ -12,6 +12,7 @@ import '../widgets/controls.dart';
 import '../widgets/data_display.dart';
 import '../widgets/feedback.dart';
 import '../widgets/hero.dart';
+import '../widgets/outbound_card.dart';
 import '../widgets/ripple.dart';
 import '../widgets/surfaces.dart';
 
@@ -434,6 +435,7 @@ class _DesktopDashboard extends StatelessWidget {
             );
           },
         ),
+        const FlvpOutboundCard(),
         FlvpCard(
           padding: const EdgeInsets.fromLTRB(20, 12, 12, 12),
           child: Row(
@@ -602,6 +604,7 @@ class _MobileDashboard extends StatelessWidget {
             ],
           ),
         ),
+        const FlvpOutboundCard(),
         FlvpCard(
           padding: const EdgeInsets.all(16),
           child: Column(

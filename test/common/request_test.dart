@@ -119,6 +119,26 @@ void main() {
 
       await expectLater(request.latestRelease(), throwsA(isA<DioException>()));
     });
+
+    test('answers nothing while the repository has no release', () async {
+      // GitHub redirects /releases/latest to /releases when nothing is
+      // published yet; that is "no update", not a failure.
+      final request = requestAnswering({
+        'api.github.com': () => ResponseBody.fromString('{}', 404),
+        'github.com': () => ResponseBody.fromString(
+          '',
+          302,
+          headers: {
+            HttpHeaders.locationHeader: [
+              'https://github.com/owner/repo/releases',
+            ],
+          },
+        ),
+      });
+
+      expect(await request.latestRelease(), isNull);
+      expect(await request.checkForUpdate(), isNull);
+    });
   });
 
   group('downloadTarget', () {

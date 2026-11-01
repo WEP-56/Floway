@@ -25,7 +25,7 @@ var
   i: Integer;
   ResultCode: Integer;
 begin
-  Processes := ['Floway.exe', 'FlClashCore.exe', 'FlClashHelperService.exe'];
+  Processes := ['Floway.exe', 'FlowayCore.exe', 'FlowayHelperService.exe'];
 
   for i := 0 to GetArrayLength(Processes)-1 do
   begin
@@ -38,7 +38,7 @@ var
   HelperPath: String;
   ResultCode: Integer;
 begin
-  HelperPath := ExpandConstant('{app}\\FlClashHelperService.exe');
+  HelperPath := ExpandConstant('{app}\\FlowayHelperService.exe');
   if FileExists(HelperPath) then
   begin
     Exec(HelperPath, 'uninstall', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
@@ -113,9 +113,13 @@ end;
 // windows/runner/Runner.rc.
 procedure RemoveUserData;
 begin
+  DelTree(ExpandConstant('{userappdata}\Floway\Floway'), True, True, True);
   DelTree(ExpandConstant('{userappdata}\com.follow\clash'), True, True, True);
+  DelTree(ExpandConstant('{localappdata}\Floway\Floway'), True, True, True);
   DelTree(ExpandConstant('{localappdata}\com.follow\clash'), True, True, True);
+  RemoveDir(ExpandConstant('{userappdata}\Floway'));
   RemoveDir(ExpandConstant('{userappdata}\com.follow'));
+  RemoveDir(ExpandConstant('{localappdata}\Floway'));
   RemoveDir(ExpandConstant('{localappdata}\com.follow'));
 end;
 

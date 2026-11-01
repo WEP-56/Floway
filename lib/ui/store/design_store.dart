@@ -54,15 +54,25 @@ abstract class FlvpBackend {
   Future<void> deleteProfile(String id);
 
   Future<void> updateProfiles();
+
+  /// 全部策略组测速；界面上的“测试延迟”按钮走这里。
+  Future<void> testDelay();
 }
 
 class FlvpDesignStore extends ChangeNotifier {
   FlvpDesignStore({AppSettings? settings, bool simulate = true})
-    : _settings = settings ?? const AppSettings() {
+    : _simulate = simulate,
+      _settings = settings ?? const AppSettings() {
     if (simulate) {
       _speedTimer = Timer.periodic(const Duration(seconds: 1), (_) => _tick());
+    } else {
+      // 生产模式没有演示数据：内核还没上报前就该是 0，而不是设计稿的假数值。
+      _clearRealtime();
     }
   }
+
+  /// 是否跑设计稿的模拟数据；生产入口传 false。
+  final bool _simulate;
 
   /// 生产入口注入的后端桥接；预览页与测试不注入。
   FlvpBackend? backend;
@@ -114,9 +124,28 @@ class FlvpDesignStore extends ChangeNotifier {
 
   FlvpAccent get accent => _settings.accent;
 
+  /// 上游当前出口节点；为空时回落到演示节点，避免界面出现空值。
+  NodeInfo? _backendNode;
+
+  /// 第一帧真实流量到达前，曲线还是演示数据。
+  bool _histPrimed = false;
+
+  void _clearRealtime() {
+    running = false;
+    uptime = 0;
+    speed = (up: 0, down: 0);
+    _session = (up: 0, down: 0);
+    for (final samples in hist.values) {
+      samples.fillRange(0, samples.length, 0);
+    }
+  }
+
   NodeInfo get currentNode =>
-      nodes.where((node) => node.id == selectedNodeId).firstOrNull ??
-      nodes.first;
+      _backendNode ??
+      (_simulate
+          ? nodes.where((node) => node.id == selectedNodeId).firstOrNull ??
+                nodes.first
+          : flvpIdleNode);
 
   SubInfo get activeSub =>
       subs.where((sub) => sub.active).firstOrNull ??
@@ -124,8 +153,8 @@ class FlvpDesignStore extends ChangeNotifier {
 
   FlvpTraffic get traffic => _settings.statsScope == FlvpStatsScope.total
       ? FlvpTraffic(
-          up: _session.up + flvpHistoryBase.up,
-          down: _session.down + flvpHistoryBase.down,
+          up: _session.up + (_simulate ? flvpHistoryBase.up : 0),
+          down: _session.down + (_simulate ? flvpHistoryBase.down : 0),
         )
       : FlvpTraffic(up: _session.up, down: _session.down);
 
@@ -189,6 +218,55 @@ class FlvpDesignStore extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// 上游策略组测速的权威状态回推，界面只反映它。
+  void syncDelayTesting(bool value) {
+    if (testing == value) return;
+    testing = value;
+    notifyListeners();
+  }
+
+  /// 上游实时速度（KB/s）回推，并推进曲线采样。
+  void syncTraffic({required double upKb, required double downKb}) {
+    speed = (up: upKb, down: downKb);
+    if (!_histPrimed) {
+      // 第一帧真实数据把演示曲线整条替换掉，避免残留假波形。
+      hist['up']!.fillRange(0, hist['up']!.length, upKb);
+      hist['down']!.fillRange(0, hist['down']!.length, downKb);
+      _histPrimed = true;
+    }
+    _pushSample('up', upKb);
+    _pushSample('down', downKb);
+    notifyListeners();
+  }
+
+  /// 上游累计流量（GB）回推。
+  void syncTotals({required double up, required double down}) {
+    if (_session.up == up && _session.down == down) return;
+    _session = (up: up, down: down);
+    notifyListeners();
+  }
+
+  /// 上游运行时长（秒）回推。
+  void syncUptime(int seconds) {
+    if (uptime == seconds) return;
+    uptime = seconds;
+    notifyListeners();
+  }
+
+  /// 上游当前出口节点回推；传 null 表示内核没有可用节点。
+  void syncCurrentNode(NodeInfo? value) {
+    _backendNode = value;
+    notifyListeners();
+  }
+
+  void _pushSample(String key, double value) {
+    final samples = hist[key];
+    if (samples == null || samples.isEmpty) return;
+    samples
+      ..removeAt(0)
+      ..add(value);
+  }
+
   /// 后端的权威快捷开关状态回推；不再反向调用后端。
   void syncShortcuts({bool? systemProxy, bool? tunMode, FlvpProxyMode? mode}) {
     final unchanged =
@@ -226,6 +304,12 @@ class FlvpDesignStore extends ChangeNotifier {
   }
 
   void testNodes() {
+    final backend = this.backend;
+    if (backend != null) {
+      // 生产入口：交给上游策略组测速，testing 由 delayTestingGroups 回推。
+      unawaited(backend.testDelay());
+      return;
+    }
     if (testing) return;
     testing = true;
     nodes = [for (final node in nodes) node.withLatency(null)];

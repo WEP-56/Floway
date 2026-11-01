@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
-import 'package:flutter/material.dart';
+import 'package:floway/common/constant.dart' show delayTimedOutValue;
+import 'package:material_ui/material_ui.dart';
 
 import '../design/motion.dart';
 import '../design/theme_scope.dart';
@@ -153,6 +154,25 @@ class FlvpLatencyBadge extends StatelessWidget {
           testing ? '测试中' : '—',
           style: flvpText(12.5, color: colors.ink3),
         ),
+      );
+    }
+    // 上游用负数表示没测出来：-1 是超时，其余是失败，都不该显示成正常延迟。
+    if (value <= 0) {
+      final tone = value == delayTimedOutValue ? colors.warn : colors.err;
+      return Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 6,
+            height: 6,
+            decoration: BoxDecoration(shape: BoxShape.circle, color: tone),
+          ),
+          const SizedBox(width: 6),
+          Text(
+            value == delayTimedOutValue ? '超时' : '失败',
+            style: flvpText(12.5, weight: FontWeight.w600, color: tone),
+          ),
+        ],
       );
     }
     final tone = value < 100

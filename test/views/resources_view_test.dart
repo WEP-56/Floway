@@ -28,7 +28,7 @@ void main() {
   late Directory home;
 
   setUpAll(() async {
-    home = Directory.systemTemp.createTempSync('flclash-resources-');
+    home = Directory.systemTemp.createTempSync('floway-resources-');
     await useAppPaths(home);
   });
 

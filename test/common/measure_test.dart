@@ -21,10 +21,10 @@ Future<Measure> _measureIn(WidgetTester tester, {double scale = 1}) async {
 void main() {
   testWidgets('sizes grow with the text scale factor', (tester) async {
     final single = await _measureIn(tester);
-    final baseline = single.computeTextSize(const Text('FlClash'));
+    final baseline = single.computeTextSize(const Text('Floway'));
 
     final doubled = await _measureIn(tester, scale: 2);
-    final scaled = doubled.computeTextSize(const Text('FlClash'));
+    final scaled = doubled.computeTextSize(const Text('Floway'));
 
     expect(scaled.width, greaterThan(baseline.width));
     expect(scaled.height, greaterThan(baseline.height));

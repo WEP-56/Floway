@@ -81,14 +81,44 @@ class _FlvpBackendBinderState extends ConsumerState<FlvpBackendBinder> {
     );
   }
 
+  /// 仪表盘上的“当前节点”：优先取 GLOBAL 组的实际出口，没有内核节点时清空。
+  ///
+  /// 上游在构建期也会推 groups，直接 notifyListeners 会撞上 "setState during
+  /// build"，所以统一推迟到帧后。
+  void _pushCurrentNode(List<Group> groups) {
+    final group = groups.where((item) => item.name == 'GLOBAL').firstOrNull ??
+        groups.firstOrNull;
+    final name = group?.now;
+    final proxy = group == null || name == null || name.isEmpty
+        ? null
+        : group.all.where((item) => item.name == name).firstOrNull;
+    final rawDelay = name == null ? null : ref.read(delayProvider(proxyName: name));
+    final node = group == null || name == null || name.isEmpty
+        ? null
+        : NodeInfo(
+            id: name,
+            name: name,
+            sub: group.name,
+            proto: (proxy?.type ?? '').toUpperCase(),
+            region: '',
+            // 负数表示没测出来，仪表盘按“无延迟”处理。
+            latency: rawDelay != null && rawDelay > 0 ? rawDelay : null,
+          );
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      widget.store.syncCurrentNode(node);
+    });
+  }
+
   @override
   void initState() {
     super.initState();
     widget.store.backend = _backend;
-    ref.listenManual(
-      isStartProvider,
-      (_, next) => widget.store.syncRunning(next),
-    );
+    ref.listenManual(isStartProvider, (_, next) {
+      widget.store.syncRunning(next);
+      // 停止后上游不再给出口节点，界面不该继续显示上一次的节点。
+      if (!next) widget.store.syncCurrentNode(null);
+    });
     ref.listenManual(
       networkSettingProvider.select((state) => state.systemProxy),
       (_, next) => widget.store.syncShortcuts(systemProxy: next),
@@ -103,6 +133,38 @@ class _FlvpBackendBinderState extends ConsumerState<FlvpBackendBinder> {
     );
     ref.listenManual(profilesProvider, (_, _) => _pushProfiles());
     ref.listenManual(currentProfileIdProvider, (_, _) => _pushProfiles());
+    ref.listenManual(
+      delayTestingGroupsProvider,
+      (_, next) => widget.store.syncDelayTesting(next.isNotEmpty),
+      fireImmediately: true,
+    );
+    ref.listenManual(trafficsProvider, (_, next) {
+      if (next.length == 0) return;
+      final sample = next[next.length - 1];
+      widget.store.syncTraffic(
+        upKb: sample.up / 1024,
+        downKb: sample.down / 1024,
+      );
+    });
+    ref.listenManual(totalTrafficProvider, (_, next) {
+      widget.store.syncTotals(
+        up: next.up / _bytesPerGb,
+        down: next.down / _bytesPerGb,
+      );
+    });
+    ref.listenManual(runTimeProvider, (_, next) {
+      if (next == null) return;
+      // 上游 runTime 是毫秒。
+      widget.store.syncUptime(next ~/ 1000);
+    });
+    ref.listenManual(
+      groupsProvider,
+      (_, next) => _pushCurrentNode(next),
+    );
+    ref.listenManual(
+      delayDataSourceProvider,
+      (_, _) => _pushCurrentNode(ref.read(groupsProvider)),
+    );
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       final config = ref.read(patchClashConfigProvider);
@@ -114,6 +176,7 @@ class _FlvpBackendBinderState extends ConsumerState<FlvpBackendBinder> {
         mode: _toFlvpMode(config.mode),
       );
       _pushProfiles();
+      _pushCurrentNode(ref.read(groupsProvider));
     });
   }
 
@@ -184,5 +247,24 @@ class _RiverpodBackend implements FlvpBackend {
     if (profileId == null) return;
     if (_ref.read(currentProfileIdProvider) == profileId) return;
     _ref.read(currentProfileIdProvider.notifier).value = profileId;
+  }
+
+  @override
+  Future<void> testDelay() async {
+    final groups = _ref.read(groupsProvider);
+    if (groups.isEmpty) return;
+    // delayTestGroups 本身不标记 testing，这里补上，界面的“测试中”才有依据。
+    final testing = _ref.read(delayTestingGroupsProvider.notifier);
+    final started = [
+      for (final group in groups)
+        if (testing.start(group.name)) group.name,
+    ];
+    try {
+      await _ref.read(proxiesActionProvider.notifier).delayTestGroups(groups);
+    } finally {
+      for (final name in started) {
+        testing.stop(name);
+      }
+    }
   }
 }
