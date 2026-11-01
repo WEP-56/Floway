@@ -28,7 +28,11 @@
   - **刻意保留**的上游字样：lib/views/about.dart 的 GPL 归属（Clash.Meta + chen08209/FlClash）、pubspec description、安装器对旧 `com.follow` 目录的清理。
 - Windows 构建已验证：flutter build windows --debug 约 20～110s，产物 build\windows\x64\runner\Debug\Floway.exe（同目录 FlowayCore.exe、FlowayHelperService.exe）。运行期 IPC 正常（`[APP] IPC Connected`），服务 Running/Automatic，注册表端口与 Rust 侧一致。
 - **配置页已接上游（2026-11-01）**：列表读 `profilesProvider`/`currentProfileIdProvider`，卡片菜单覆盖编辑/重命名/覆写/同步/运行配置/复制链接/二维码/导出/删除，工具条有更新全部与排序；添加配置拆成链接/文件/二维码/自定义四个上游入口（lib/ui/pages/add_profile_modal.dart，旧的 import_sub_modal.dart 已删除）。编辑、覆写、自定义工作区、运行配置直接打开上游页面（见 §4）。
-- Android 构建**未验证**：Gradle wrapper 需下载 gradle-9.8.0-all（本地缓存只剩 0 字节 .part），当时用户代理未开、直连 services.gradle.org 超时。开代理后重跑 `flutter build apk --debug` 即可验证包名改动。
+- **设置页已接上游（2026-11-01）**：一级分组沿用 Floway 卡片，内容全部换成上游字段与页面；开关直接写 `appSettingProvider`/`networkSettingProvider`/`patchClashConfigProvider`，由上游 `configProvider` 监听落盘；复杂项打开 `ThemeView`/`GeneralView`/`NetworkListView`/`DnsView`/`BackupAndRestore` 等（见 §4）。
+- **主题已统一到上游（2026-11-01）**：Floway 壳的深浅与色相不再来自 `FlvpDesignStore`，而是 `currentBrightnessProvider` + `genColorSchemeProvider` 的 primary 色相（`flvpLightColorsOfHue` / `flvpDarkColorsOfHue`，支持 `pureBlack`）；侧栏主题按钮改写 `themeSettingProvider.themeMode`。
+- **设置二级页（2026-11-01）**：关于、快捷键、按需连接、入站端口与认证、网络设置（含排除域名）、自定义资源已按 Floway 版式重写；DNS、附加规则、脚本、资源更新、备份与恢复等仍是上游页面，但经 `FlvpUpstreamPage` 套了 Floway 配色（见 §4）。
+- **导航容器现状（2026-11-01）**：Windows 用左侧栏（`lib/ui/shells/desktop_shell.dart`），Android 用底部导航（`lib/ui/shells/mobile_shell.dart`）。安卓底栏只放四项（仪表盘/代理/配置/设置），「信息」收进设置页顶部（`FlvpSettingsPage.onNavigate`），`_NavItem` 宽度按可用宽度自适应。目标是统一成「移动端抽屉 + Windows 右侧栏」，见 §8。
+- **Android 构建已通过（2026-11-01）**：`flutter build apk --debug --target-platform android-x64` 成功（约 152MB），装到 127.0.0.1:5555 模拟器实测：仪表盘 / 配置 / 设置 / 信息、主题弹层、自定义资源二级页均正常。构建链路上的三处坑（NDK 28 无 libclang、gomobile VCS、Kotlin 增量缓存）见 §6。
 - 工具链：Flutter 3.47.7 / Dart 3.13.5（E:\flutter）、Go（scoop shims，go1.27.3）、cargo 1.95、Visual Studio 2022（C++ 桌面工作负载）。
 
 ## 3. 接线架构（改动前必读）
@@ -40,9 +44,9 @@
 - 生产入口以 `FlvpDesignStore(simulate: false)` 构造：无演示流量、无演示时长、累计为 0、`currentNode` 在内核未上报时是 `flvpIdleNode`（未选择节点）。演示基数 `flvpHistoryBase` 只在 simulate:true 时叠加。
 - FlvpBackend 方法：setRunning、setSystemProxy、setTunMode、setMode、setCurrentProfile、addProfileFromLink、deleteProfile、updateProfiles、testDelay。
 - store 回推方法：syncRunning、syncShortcuts、syncProfiles、syncDelayTesting、syncTraffic（KB/s，含曲线采样，首帧清演示波形）、syncTotals（GB）、syncUptime（秒）、syncCurrentNode。
-- 已接上游：启动/停止、出站模式、系统代理、TUN 开关、**配置列表与当前配置、配置增删/同步/全部更新/排序、配置编辑/覆写/自定义工作区/运行配置、添加配置四入口**、**代理页策略组/节点/切换/单点测速/整体测速**、**仪表盘状态/时长/延迟/订阅/上下行速度与曲线/累计流量/出口 IP 卡片**。
-- 未接：设置页持久化回写、信息页四类记录、仪表盘其余卡片（连接统计、内网 IP、服务状态、内存、网络接管）。
-- 配置页遗留：二级页目前直接复用上游页面（风格为上游 Material），PROFILE-11 的编辑器外观与 PROFILE-13～16 的 Floway 化外观尚未统一。
+- 已接上游：启动/停止、出站模式、系统代理、TUN 开关、**配置列表与当前配置、配置增删/同步/全部更新/排序、配置编辑/覆写/自定义工作区/运行配置、添加配置四入口**、**代理页策略组/节点/切换/单点测速/整体测速**、**仪表盘状态/时长/延迟/订阅/上下行速度与曲线/累计流量/出口 IP 卡片**、**设置页全部开关与上游二级页**、**主题（深浅/色相/纯黑）跟随上游 ThemeProps**、**设置二级页（关于/快捷键/按需连接/入站端口与认证/网络设置/自定义资源）**。
+- 未接：信息页四类记录、仪表盘其余卡片（连接统计、内网 IP、服务状态、内存、网络接管）。
+- 遗留：设置二级页里 DNS / 附加规则 / 脚本 / 资源更新 / 备份与恢复 / 字体与字号，以及配置页的编辑 / 覆写 / 自定义工作区 / 运行配置仍是上游页面（经 `FlvpUpstreamPage` 统一了配色，版式还是上游 Material）；导航容器待统一成「移动端抽屉 + Windows 右侧栏」（见 §8）。
 
 ## 4. 上游入口速查
 
@@ -54,6 +58,10 @@
 - 流量与时长：trafficsProvider（FixedList<Traffic>，字节/秒，取 `[length-1]`）、totalTrafficProvider（Traffic，字节）、runTimeProvider（int?，**毫秒**）、isStartProvider。
 - 出口信息：outboundIpProbeProvider（`.watch/.unwatch/.refresh(const [routedOutbound])`，`entryOf(routedOutbound).value` → IpInfo）、ipQualityProvider(ip) → IpQuality（organization / type / level，负数场景见上）。
 - 仪表盘组件基准：lib/views/dashboard/widgets/（traffic、connection_stats、proxy_groups、intranet_ip、service_status、memory_info、network_takeover、core_status_button、current_outbound）。
+- 设置与主题：appSettingProvider / networkSettingProvider / patchClashConfigProvider / themeSettingProvider（写入即由 `configProvider` 监听落盘）；`currentBrightnessProvider`（深浅）、`genColorSchemeProvider(brightness)`（上游主题色 → Floway 色相）、`delayTestTimeoutOptions`（common/constant.dart）、`defaultPrimaryColors`（主题色色板）。
+- 二级页共用件：`lib/ui/widgets/page_scaffold.dart`（`FlvpPageScaffold`、`FlvpPageScope`、`pushFlvpPage`、`showFlvpTextPrompt`、`showFlvpNumberPrompt`、`showFlvpOptionsPrompt`）、`settings_section.dart`（`FlvpSettingsSection/Row/Toggle/Link/Value`）、`upstream_page.dart`（`FlvpUpstreamPage` + `openFlvpUpstreamPage`：把上游 `ThemeData` 的 ColorScheme 换成 Floway token，供尚未重写版式的上游页面使用）。**跳转必须走 `pushFlvpPage` / `openFlvpUpstreamPage`**，不要直接 `BaseNavigator.push` 一个 Floway 页面。
+- 已重写的设置二级页：`lib/ui/pages/settings/about_page.dart`、`hotkey_page.dart`（录制仍用上游 `HotKeyRecorder`）、`on_demand_page.dart`、`inbound_page.dart`、`network_page.dart`、`string_list_page.dart`、`custom_resources_page.dart`（不暴露图标集）。
+- 设置二级页（`BaseNavigator.push`）：views/theme.dart 的 `ThemeView`、font_family.dart 的 `FontFamilyView`、config/general.dart 的 `GeneralView`、config/network.dart 的 `NetworkListView`、config/dns.dart 的 `DnsView`、config/rules.dart 的 `AddedRulesView`、config/scripts.dart 的 `ScriptsView`、config/on_demand.dart 的 `OnDemandView`、config/custom_resources.dart 的 `CustomResourcesView`、config/user_agents.dart 的 `UserAgentsView`、resources.dart 的 `ResourcesView`、hotkey.dart 的 `HotKeyView`、access.dart 的 `AccessView`、backup_and_restore.dart 的 `BackupAndRestore`、about.dart 的 `AboutView`、developer.dart 的 `DeveloperView`。注意 `TunView`/`SnifferView`/`NtpView` 需要 profileId（单份配置的覆写），全局 TUN 在网络页里。
 - 免责声明：启动弹窗已移除（lib/bootstrap.dart）；lib/views/disclaimer.dart 仍作为工具/关于页的手动入口保留。
 
 ## 5. 构建与启动（Windows）
@@ -72,6 +80,10 @@ Android 需要 Android SDK/NDK、Go 工具链与可用的 Gradle 下载链路，
 - **PowerShell 批量替换陷阱**：把替换对写成函数并用 `@(@("a","b"))` 传参会**被摊平成两个独立参数**，退化成"首字符→次字符"式的单字符替换，能静默毁掉整个文件（本轮曾把 changelog.dart、request.dart、clash_config.dart、certificate.go 改坏）。批量改名一律用显式 `.Replace` 链或 `[string[]]$from / [string[]]$to` 并行数组，改完用 `git diff --numstat` 核对每处命中数。
 - **material_ui 分裂**：Flutter 3.47 把 Material 拆成 package:material_ui。Floway 页面必须 `import 'package:material_ui/material_ui.dart'`；与 flutter/material 混用会抛 `No MaterialLocalizations found.`（本轮统一了 17 个文件）。
 - **setState during build**：`ref.listenManual` 里同步 `notifyListeners()` 会撞上 "setState() or markNeedsBuild() called during build"，尤其是 `fireImmediately: true` 和上游在构建期推 groups 的场景。回推 store 一律 `WidgetsBinding.instance.addPostFrameCallback`。
+- **二级页作用域（2026-11-01 踩过两次）**：`FlvpThemeScope` / `FlvpStoreScope` / `FlvpModalHost` 都装在壳里（`MaterialApp.home` 之下），而二级页是根 Navigator 上的路由，不在它们的子树里。直接 `FlvpThemeScope.of(context)` 会报 `Null check operator used on a null value`（整页红屏），弹层也会找不到 host。**打开 Floway 页面（含三级页）一律用 `pushFlvpPage`**（lib/ui/widgets/page_scaffold.dart，会重挂主题/store 并自带 `FlvpModalHost`）；打开上游页面用 `openFlvpUpstreamPage`（内部已走 `pushFlvpPage`）。回归测试见 test/ui/settings_page_test.dart 的三条 “secondary pages… / a pushed page… / third level pages…”。
+- **品牌图**：关于页用 `assets/branding/floway.png`（真实 logo），不要用 `FlvpAppMark`（代码画的占位标记）。
+- **安卓构建（2026-11-01 修好）**：三处坑——① NDK 27+ 不再带 libclang，rquickjs 的 bindgen 靠 `plugins/rust_api/hook/build.dart` 回退到外部 LLVM 并补 `-resource-dir`（`BINDGEN_EXTRA_CLANG_ARGS_<triple>`），要求见 `plugins/rust_api/README.md`；② gomobile 在临时目录 `go build` 会报 `error obtaining VCS status`，`android/core/build.gradle.kts` 已加 `GOFLAGS=-buildvcs=false`；③ Windows 上 Kotlin 增量缓存关不掉会让 `:android_file_picker` 失败，`android/gradle.properties` 已设 `kotlin.incremental=false`。
+- **安卓底栏**：只有 4 项（仪表盘/代理/配置/设置），「信息」在设置页顶部（`FlvpSettingsPage.onNavigate` 回调），桌面侧栏仍是 5 项；`_NavItem` 宽度按可用宽度自适应。
 - 布局：Floway 页面挂在壳的 SingleChildScrollView 里，不能用 `Expanded`（用 ConstrainedBox(minHeight:) 撑高）；Scrollbar 与 SingleChildScrollView 必须共用同一个 controller，否则报 "ScrollController has no ScrollPosition attached"。
 - FlvpIcon 只有 46 个图标名，未知名会 assert 崩溃（没有 ArrowRight、Waypoints；可用 Route、Network、Zap、Search、X 等），新页面用图标前先查 lib/ui/icons/flvp_icons.dart。
 - 依赖：必须沿用仓库根的 pubspec.lock。重新解析会把 material_ui 升到高版本，与 material_new_shapes 冲突，产生成片 ambiguous_import。
@@ -81,21 +93,24 @@ Android 需要 Android SDK/NDK、Go 工具链与可用的 Gradle 下载链路，
 
 ## 7. 提交与推送状态
 
-- 上一轮提交：命名与存储路径剥离 FlClash + 图标资产恢复 + 代理页与仪表盘接上游数据（含出口 IP 卡片、测速反馈、延迟负值语义、演示数据清出生产路径）。
-- 本轮提交：配置页接上游（列表/菜单/工具条/添加配置四入口 + 上游编辑、覆写、自定义工作区、运行配置、排序），`FlvpField.multiline`、Eye/QrCode 图标、`FlvpBackend.updateProfiles` 语义修正，新增两组页面级 widget 测试。
-- 推送：git push origin main（远端 https://github.com/WEP-56/Floway.git）。工作区应保持干净。
+- 更早的提交：命名与存储路径剥离 FlClash + 图标资产恢复 + 代理页与仪表盘接上游数据（含出口 IP 卡片、测速反馈、延迟负值语义、演示数据清出生产路径）。
+- `06bc75e`：配置页接上游（列表/菜单/工具条/添加配置四入口 + 上游编辑、覆写、自定义工作区、运行配置、排序），`FlvpField.multiline`、Eye/QrCode 图标、`FlvpBackend.updateProfiles` 语义修正。
+- `61e7ebb`：安卓构建修复 —— NDK 28 无 libclang 时的 bindgen 回退（含 `-resource-dir`）、gomobile `GOFLAGS=-buildvcs=false`、关闭 `kotlin.incremental`。
+- `c6986bc`：设置二级页按 Floway 版式重写（关于/快捷键/按需连接/入站端口与认证/网络设置/自定义资源 + 共用件）、`pushFlvpPage` 修掉二级页与三级页的 null 崩溃、安卓底栏改四项且信息移入设置页。
+- 工作区：仅文档（TODO.md、handoff.md）。
+- 推送：`git push origin main`（远端 https://github.com/WEP-56/Floway.git）。推送需要本地代理 127.0.0.1:7897，已开。
 
 ## 8. 下一步（用户指定顺序）
 
-按 **配置页 → 设置页 → 信息页** 推进，配置页的功能入口已通，剩下外观与剩余项：
+用户给的剩余清单，按这个顺序做：
 
-1. 配置页收尾（可选）：PROFILE-11 编辑器外观、PROFILE-13～16 工作区 Floway 化、PROFILE-04 配置统计摘要。
-2. 设置页：SET 系列 —— 设置项持久化回写与上游入口补齐（当前设置页多数开关只改 store，没有落盘）。
-3. 信息页：INFO-03～10 —— 连接/日志/请求/DNS 四类记录，参考 lib/views/ 下对应视图。
-4. 仪表盘其余卡片：连接统计、内网 IP、服务状态、内存、网络接管（DASH 系列）。
+1. **信息页接通**（INFO-03～10）：连接 / 请求 / DNS / 日志四类记录接上游，参考 lib/views/connection/、views/dns_queries.dart、views/logs.dart；`lib/ui/pages/info_page.dart` 目前只有骨架（统计卡 + tab + 搜索框 + 空态）。
+2. **剩余二/三级页面 Floway 化**：DNS、附加规则、脚本、资源更新、备份与恢复、字体与字号（现在只套了 `FlvpUpstreamPage` 配色）；配置页的编辑（`EditProfileView`）、覆写（`ExtendView`）、自定义工作区（`CustomProfileView`）、运行配置（`PreviewProfileView`）。
+3. **导航容器风格统一**：移动端改成抽屉（drawer），Windows 改成右侧栏，两者配色/图标/分组与页面保持一致；改完同步 `lib/ui/nav.dart` 的入口表与 `settings_page.dart` 里的信息入口（信息回到抽屉/侧栏后，设置页的 `onNavigate` 入口可以保留也可以去掉）。
+
+随后可做：仪表盘其余卡片（连接统计、内网 IP、服务状态、内存、网络接管，DASH 系列）。
 
 已知待办（非本轮）：
-- Android 构建验证（需开代理让 Gradle 下载发行包）。
 - TUN 实测（helper 与 core 已就绪，尚未在开启连接的状态下验证虚拟网卡与路由）。
 - 旧数据目录 `%APPDATA%\com.follow\Floway` 仍在（用户明确不迁移）。
 - 上游自带 `test/lint` 与 `test/widget_test.dart` 的既有失败（Floway 页面用了 CircularProgressIndicator、`FlvpApp` 缺 ProviderScope），未处理。

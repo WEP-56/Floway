@@ -384,3 +384,37 @@ Windows 侧边栏与 Android 底栏统一为五个主入口：**仪表盘 / 代�
 - 验证：`flutter analyze --no-pub lib test` 无问题；新增 `test/ui/subscriptions_page_test.dart`（5 例）与 `test/ui/add_profile_modal_test.dart`（3 例）通过；`flutter build windows --debug` 通过。
 - 仍未完成：PROFILE-11 的编辑器 Floway 标题栏/搜索菜单外观、PROFILE-13～16 的 Floway 化外观（当前复用上游工作区与表单，风格仍是上游 Material）、PROFILE-04 的配置统计摘要；信息页（INFO）、设置页（SET）未开始。
 - 既有失败（与本轮无关，未处理）：`test/lint` 中 circular_progress / disposable_field / design_package 等仍报上一轮 `lib/ui/pages/nodes_page.dart`、`lib/ui/widgets/outbound_card.dart` 与上游 `lib/core/event.dart`、`lib/plugins/app.dart`；`test/widget_test.dart` 因 `FlvpApp` 外没有 `ProviderScope`，在仪表盘出口卡处崩溃。
+### 设置页接上游（2026-11-01 追加）
+
+- 设置一级页改为 `ConsumerStatefulWidget` 直接读写上游配置，分组与卡片沿用 Floway 排版：外观与交互 / 启动与后台 / 代理与网络 / 配置与规则 / 资源管理 / 平台功能 / 数据与备份 / 应用与信息。
+- 直接绑定上游字段的开关与选择（写入后由上游 `configProvider` 监听、`savePreferencesDebounce` 落盘）：`autoLaunch`、`silentLaunch`（仅桌面）、`autoRun`、`minimizeOnExit`（仅桌面）、`hidden`/`showNotificationStopAction`（仅 Android）、`floatingNavigationBar`（仅手机）、`tabAnimation`、`networkSetting.systemProxy`、`patchClashConfig.tun.enable`、`allowLan`、`findProcessMode`、`onlyStatisticsProxy`、`closeConnections`、`delayTestTimeout`、`checkCertificate`、`autoCheckUpdate`、`openLogs`、`locale`、`logLevel`。
+- 语言、日志等级、测速超时、页面切换动画使用 Floway 弹层（`FlvpModal` + `FlvpRadioList`）直接写上游字段。
+- 复杂项直接打开上游页面：`ThemeView`、`FontFamilyView`、`OnDemandView`、`GeneralView`（端口/外部控制器/认证/Hosts/日志）、`NetworkListView`（系统代理/TUN/网络栈/绕过域名）、`DnsView`、`AddedRulesView`、`ScriptsView`、`CustomResourcesView`、`ResourcesView`、`HotKeyView`（桌面）、`AccessView`（Android）、`BackupAndRestore`、`UserAgentsView`、`AboutView`（版本与检查更新）、`DeveloperView`（仅开发者模式）。
+- 主题统一到上游 `ThemeProps`：`FlvpShellHost` 改为 Consumer，深浅取 `currentBrightnessProvider`、色相取 `genColorSchemeProvider` 的 primary、纯黑透传 `pureBlack`；`design/tokens.dart` 新增 `flvpLightColorsOfHue` / `flvpDarkColorsOfHue(hue, pureBlack)`，原 `FlvpAccent` 预设仅留给设计预览。侧栏主题按钮改写 `themeSettingProvider.themeMode`，不再改 Floway 自己的演示设置。
+- 删除演示项：混合/SOCKS 端口表单、DNS 文本框、网络栈单选、关闭按钮行为、统计范围、卸载管理员协助进程、固定快捷键列表、演示备份与固定版本号。
+- 验证：`flutter analyze --no-pub lib test` 无问题；新增 `test/ui/settings_page_test.dart`（4 例）与 `test/ui/theme_tokens_test.dart`（3 例）通过；`flutter build windows --debug` 通过。
+- 未完成：UI 缩放（`textScale`）、色彩风格（`colorStyle`）、液态玻璃（`liquidGlass`）尚无入口；设置项仍以上游页面呈现，未做 Floway 换肤（SET-03 的二级页外观）；嗅探与 NTP 是单份配置的覆写项，未放进全局设置。
+- 平台差异：桌面显示「系统代理 / TUN 模式」，Android 改显示「VPN 接管」（`vpnSetting.enable`）并隐藏系统代理开关，交由网络页的 VPN 系统代理项；仪表盘顶部的系统代理/TUN 快捷开关仍统一写 `networkProps` / `patchClashConfig.tun`，Android 实测时需与这里对齐。
+### 设置二级页 Floway 化（2026-11-01 追加）
+
+- 共用件：`lib/ui/widgets/page_scaffold.dart`（`FlvpPageScaffold` 标题栏+滚动体，`showFlvpTextPrompt` / `showFlvpNumberPrompt` / `showFlvpOptionsPrompt`）、`lib/ui/widgets/settings_section.dart`（`FlvpSettingsSection/Row/Toggle/Link/Value`）、`lib/ui/widgets/upstream_page.dart`（`FlvpUpstreamPage`：保留上游 `ThemeData` 的形状与排版扩展，只把 `ColorScheme` 换成 Floway token）。
+- 设置项：语言只保留「跟随系统 / 简体中文 / English」；主题改为弹层（外观模式 + 8 个主题色 + 动态取色 + 纯黑），不再跳上游 `ThemeView`。
+- 按 Floway 版式重写：关于（去掉“其它贡献者”，保留版本/来源/构建信息/检查更新/5 击开启开发者模式）、快捷键（行 + `FlvpKbd` 键帽，录制沿用上游 `HotKeyRecorder`）、按需连接（权限 + 排除 SSID）、入站端口与认证（5 个端口 + 局域网 + 外部控制器 + 认证）、网络设置（系统代理/排除域名/回环、TUN/网络栈/出口网卡/MTU/路由地址/路由排除/绕过私有网段、Keep-Alive）、字符串列表页（排除域名等）、自定义资源（去掉图标集入口）。
+- 去重：一级「代理与网络」不再重复放系统代理/TUN/局域网，统一收进二级页。
+- 尚未重写但已统一配色（经 `FlvpUpstreamPage`）：DNS、附加规则、脚本、资源更新、应用访问控制、备份与恢复、请求 UA、字体与字号、开发者选项，以及配置页的编辑/覆写/自定义工作区/运行配置/排序。
+- 验证：`flutter analyze --no-pub lib test` 无问题；`test/ui` 21 例通过（新增 `settings_pages_test.dart` 6 例）；`flutter build windows --debug` 通过。
+- 未完成：DNS/附加规则/脚本/资源更新/备份与恢复 的 Floway 版式重写；配置页编辑与自定义工作区的版式重写；字体与字号仍走上游页面。
+- 修复（2026-11-01 回修）：二级页打不开（`Null check operator used on a null value`）—— 原因是二级页是根 Navigator 路由，不在壳的 `FlvpThemeScope`/`FlvpStoreScope`/`FlvpModalHost` 子树里。新增 `pushFlvpPage`（lib/ui/widgets/page_scaffold.dart）在路由里重挂三个作用域并自带弹层宿主，设置页与配置页的所有跳转改走它；`openFlvpUpstreamPage` 同步改走 `pushFlvpPage`。补两条回归测试（页面能打开、页面内能弹层）。
+- 修复（2026-11-01 回修 2）：三级页（排除域名 / 路由地址 / 路由排除地址）同款崩溃 —— 网络页里的 `_open` 漏改成 `pushFlvpPage`，已改；补三级页打开与新增条目的回归测试。关于页图标改用真实品牌图 `assets/branding/floway.png`（原来是代码画的占位标记 `FlvpAppMark`）。
+
+### 安卓构建与底栏（2026-11-01）
+
+`flutter run -d 127.0.0.1:5555` 起不来的三个独立原因，均已修：
+
+1. **NDK 28 不再随包提供 libclang**，rquickjs 在 Android 上要跑 bindgen：`plugins/rust_api/hook/build.dart` 现在按目标架构推 target triple，NDK 里没有 libclang 时回退到 `LIBCLANG_PATH` → `Program Files\LLVM` → Visual Studio LLVM；因为这时 clang 不是 NDK 自带的，推不出 resource dir（`stdbool.h` 找不到），所以额外补 `BINDGEN_EXTRA_CLANG_ARGS_<triple>` = `--sysroot` + `-I<sysroot>/usr/include/<triple>` + `-resource-dir=<clang resource dir>`。要求也写进了 `plugins/rust_api/README.md`。
+2. **gomobile 的 `go build` 报 `error obtaining VCS status: exit status 128`**（它在系统临时目录生成模块，不是 git 工作区）：`android/core/build.gradle.kts` 给 gomobile bind 加 `GOFLAGS=-buildvcs=false`。
+3. **`:android_file_picker:compileDebugKotlin` 报 `Could not close incremental caches`**（Windows 上 Kotlin 增量缓存关不掉）：`android/gradle.properties` 关掉 `kotlin.incremental`。
+
+底栏：安卓从 5 项改成 4 项 —— 「信息」移进设置页顶部（`信息 → 连接与日志`，通过 `FlvpSettingsPage.onNavigate` 跳转，打开信息时底栏仍高亮「设置」）；`_NavItem` 宽度改成按可用宽度自适应（原来固定 76，5 项在 360dp 上溢出 36px）。桌面侧栏仍是 5 项。
+
+验证：`flutter build apk --debug --target-platform android-x64` 通过；装到模拟器后仪表盘 / 配置 / 设置 / 信息、主题弹层、自定义资源二级页均正常；`flutter analyze --no-pub lib test` 干净；`test/ui` 28 例通过；`flutter build windows --debug` 通过。
