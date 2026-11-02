@@ -1,7 +1,10 @@
 script_template: inno_setup.iss
-app_id: 728B3532-C74B-4870-9068-BE70FE12A3E6
+# Floway 自己的 AppId。绝不能沿用上游 FLClash 的 728B3532-C74B-4870-9068-BE70FE12A3E6：
+# Inno 用 AppId 认「已安装的旧版本」，共用时会复用 FLClash 的安装目录、覆盖它的
+# 卸载登记项，于是两个产品互相挤占、一起被卸载。
+app_id: 403EFA20-8A74-4183-B5EC-1F4B0A16B238
 app_name: Floway
-publisher: chen08209
+publisher: Floway
 publisher_url: https://github.com/WEP-56/Floway
 display_name: Floway
 executable_name: Floway.exe

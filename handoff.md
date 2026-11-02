@@ -25,7 +25,11 @@
   - 数据目录 `%APPDATA%\Floway\Floway`（path_provider 取 exe 版本信息的 CompanyName\ProductName；windows/runner/Runner.rc 已改）。
   - 更新源 WEP-56/Floway；调试环境变量 FLOWAY_CORE_DEBUG；安装器进程名与清理项同步。
   - 图标资产已恢复：托盘四态 ico（灰/品牌蓝/TUN 青/安全模式橙）、应用 ico+png、Android 自适应图标（mipmap 前景图 + values-v27/night-v27 splash 指向）。
-  - **刻意保留**的上游字样：lib/views/about.dart 的 GPL 归属（Clash.Meta + chen08209/FlClash）、pubspec description、安装器对旧 `com.follow` 目录的清理。
+  - **刻意保留**的上游字样：lib/views/about.dart 的 GPL 归属（Clash.Meta + chen08209/FlClash）、pubspec description。
+- **Windows 安装器身份已独立（2026-11-02）**：`windows/packaging/exe/make_config.yaml` 的 `app_id` 换成 Floway 自己的 `403EFA20-8A74-4183-B5EC-1F4B0A16B238`（此前沿用 FLClash 的 `728B3532-C74B-4870-9068-BE70FE12A3E6`，Inno 因此把已装的 FLClash 当成「旧版 Floway」：跳过目录页、复用 FLClash 的安装目录、覆盖它的卸载登记项，卸载时一起清空），`publisher` 改为 Floway；`.iss` 里显式 `DefaultDirName={autopf}\Floway`、`UninstallDisplayName`/`UninstallDisplayIcon`、`CloseApplications=no`（不让 Restart Manager 动隔壁 FLClash）。卸载只清 Floway 自己的 `%APPDATA%`/`%LOCALAPPDATA%` 下 `Floway\Floway` 与早期 `com.follow\Floway`，**不再删 FLClash 的 `com.follow\clash`**。
+  - 旧版残留迁移：安装器在 `InitializeSetup` 读旧键 `...\Uninstall\{728B3532-...}_is1`；目录里只有 `Floway.exe` 时把它当默认安装目录（原地升级）并在装完后删掉旧键，目录里同时有 `FlClash.exe` 时只弹提示，不继承目录也不删键。
+  - 旧版用户清理顺序：备份 `%APPDATA%\com.follow\clash` → 卸载旧条目（那条记录其实属于 FLClash）→ 重装 FLClash → 装新版 Floway。Floway 数据在 `%APPDATA%\Floway\Floway`，不随安装目录变化。
+- **移动端仪表盘改为横向启停条 + 拼图（2026-11-02）**：`lib/ui/pages/dashboard_page.dart` 的 `_MobileDashboard` 去掉大圆盘，换成 76 高的状态条（左电源键：连接时圆角方块、断开时圆形；中状态与节点；右运行时长；整条可点，连接时整条铺主题色）+ 宽窄交替的拼图行：下载 3 / 上传 2 → 延迟 2 / 订阅流量 3 → 出口信息通栏 → 代理模式 2 / 当前节点+累计流量 3。行内等高靠 `IntrinsicHeight`，窄格数字用 `FittedBox(scaleDown)` 防溢出，卡片内用 `Spacer` 吸收多余高度。桌面布局未动。
 - Windows 构建已验证：flutter build windows --debug 约 20～110s，产物 build\windows\x64\runner\Debug\Floway.exe（同目录 FlowayCore.exe、FlowayHelperService.exe）。运行期 IPC 正常（`[APP] IPC Connected`），服务 Running/Automatic，注册表端口与 Rust 侧一致。
 - **配置页已接上游（2026-11-01）**：列表读 `profilesProvider`/`currentProfileIdProvider`，卡片菜单覆盖编辑/重命名/覆写/同步/运行配置/复制链接/二维码/导出/删除，工具条有更新全部与排序；添加配置拆成链接/文件/二维码/自定义四个上游入口（lib/ui/pages/add_profile_modal.dart，旧的 import_sub_modal.dart 已删除）。编辑、覆写、自定义工作区、运行配置直接打开上游页面（见 §4）。
 - **设置页已接上游（2026-11-01）**：一级分组沿用 Floway 卡片，内容全部换成上游字段与页面；开关直接写 `appSettingProvider`/`networkSettingProvider`/`patchClashConfigProvider`，由上游 `configProvider` 监听落盘；复杂项打开 `ThemeView`/`GeneralView`/`NetworkListView`/`DnsView`/`BackupAndRestore` 等（见 §4）。

@@ -123,29 +123,35 @@ class _SpeedCard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 12),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.baseline,
-            textBaseline: TextBaseline.alphabetic,
-            children: [
-              Text(
-                speed.value,
-                style: flvpText(
-                  compact ? 24 : 30,
-                  height: 1,
-                  color: colors.ink,
-                  tabular: true,
+          // 拼图里的窄格只有屏幕的 2/5，数字加单位可能放不下，按需等比缩小。
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.baseline,
+              textBaseline: TextBaseline.alphabetic,
+              children: [
+                Text(
+                  speed.value,
+                  style: flvpText(
+                    compact ? 22 : 30,
+                    height: 1,
+                    color: colors.ink,
+                    tabular: true,
+                  ),
                 ),
-              ),
-              const SizedBox(width: 6),
-              Text(
-                speed.unit,
-                style: flvpText(
-                  12,
-                  weight: FontWeight.w400,
-                  color: colors.ink3,
+                const SizedBox(width: 6),
+                Text(
+                  speed.unit,
+                  style: flvpText(
+                    12,
+                    weight: FontWeight.w400,
+                    color: colors.ink3,
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
           const SizedBox(height: 12),
           FlvpSparkline(data: data, tone: tone, height: compact ? 32 : 40),
@@ -171,10 +177,17 @@ class _SpeedCard extends StatelessWidget {
 }
 
 class _QuotaCard extends StatelessWidget {
-  const _QuotaCard({required this.onTap, required this.stretch});
+  const _QuotaCard({
+    required this.onTap,
+    required this.stretch,
+    this.showPercent = false,
+  });
 
   final VoidCallback onTap;
   final bool stretch;
+
+  /// 移动端拼图里把已用比例直接摆在标题行右侧。
+  final bool showPercent;
 
   @override
   Widget build(BuildContext context) {
@@ -215,7 +228,27 @@ class _QuotaCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: stretch ? MainAxisSize.max : MainAxisSize.min,
         children: [
-          Text('订阅流量', style: flvpText(13, color: colors.ink2)),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  '订阅流量',
+                  maxLines: 1,
+                  style: flvpText(13, color: colors.ink2),
+                ),
+              ),
+              if (showPercent)
+                Text(
+                  '${(ratio * 100).round()}%',
+                  style: flvpText(
+                    12,
+                    weight: FontWeight.w600,
+                    color: colors.ink3,
+                    tabular: true,
+                  ),
+                ),
+            ],
+          ),
           const SizedBox(height: 12),
           Row(
             crossAxisAlignment: CrossAxisAlignment.baseline,
@@ -492,85 +525,37 @@ class _DesktopDashboard extends StatelessWidget {
   }
 }
 
+/// 节点行文案：`香港 01 · Hysteria2`，没选节点时退化成占位。
+String _nodeLine(NodeInfo node) {
+  final name = node.name.isEmpty ? '未选择节点' : node.name;
+  return node.proto.isEmpty ? name : '$name · ${node.proto}';
+}
+
+/// 移动端仪表盘：一条横向启停状态条 + 拼图卡片（宽窄交替，按信息优先级排）。
 class _MobileDashboard extends StatelessWidget {
   const _MobileDashboard({required this.onNavigate});
 
   final ValueChanged<FlvpPageKey> onNavigate;
 
-  Widget _stat(FlvpColors colors, String icon, String value) => Container(
-    height: 32,
-    padding: const EdgeInsets.symmetric(horizontal: 12),
-    decoration: BoxDecoration(
-      color: colors.surf2,
-      borderRadius: BorderRadius.circular(10),
-    ),
-    child: Row(
-      spacing: 6,
-      children: [
-        FlvpIcon(icon, size: 14, color: colors.ink2),
-        Text(value, style: flvpText(12.5, color: colors.ink2, tabular: true)),
-      ],
-    ),
-  );
-
   @override
   Widget build(BuildContext context) {
     final store = FlvpStoreScope.of(context);
-    final colors = FlvpThemeScope.colorsOf(context);
     final scope = store.settings.statsScope == FlvpStatsScope.total
         ? '累计'
         : '本次';
     final node = store.currentNode;
     final running = store.running;
+    // 拼图节奏：3/2 → 2/3 → 通栏 → 2/3，每行只有一张卡，行内等高由
+    // IntrinsicHeight 兜住，字号放大也不会溢出。
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       spacing: 12,
       children: [
-        FlvpCard(
-          padding: const EdgeInsets.fromLTRB(20, 28, 20, 24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              FlvpPowerButton(
-                running: running,
-                onToggle: store.toggleRunning,
-                size: 150,
-              ),
-              const SizedBox(height: 20),
-              Text(
-                running ? '已连接' : '未连接',
-                style: flvpText(24, color: colors.ink),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                '${node.name} · ${node.proto}',
-                style: flvpText(
-                  13.5,
-                  weight: FontWeight.w400,
-                  color: colors.ink2,
-                ),
-              ),
-              const SizedBox(height: 16),
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                spacing: 8,
-                children: [
-                  _stat(
-                    colors,
-                    'Timer',
-                    running ? fmtUptime(store.uptime) : '--:--:--',
-                  ),
-                  _stat(
-                    colors,
-                    'Activity',
-                    running && node.latency != null
-                        ? '${node.latency} ms'
-                        : '—',
-                  ),
-                ],
-              ),
-            ],
-          ),
+        _MobileStatusBar(
+          running: running,
+          node: node,
+          uptime: store.uptime,
+          onToggle: store.toggleRunning,
         ),
         IntrinsicHeight(
           child: Row(
@@ -578,6 +563,7 @@ class _MobileDashboard extends StatelessWidget {
             spacing: 12,
             children: [
               Expanded(
+                flex: 3,
                 child: _SpeedCard(
                   compact: true,
                   label: '下载',
@@ -590,6 +576,7 @@ class _MobileDashboard extends StatelessWidget {
                 ),
               ),
               Expanded(
+                flex: 2,
                 child: _SpeedCard(
                   compact: true,
                   label: '上传',
@@ -604,32 +591,369 @@ class _MobileDashboard extends StatelessWidget {
             ],
           ),
         ),
-        const FlvpOutboundCard(),
-        FlvpCard(
-          padding: const EdgeInsets.all(16),
-          child: Column(
+        IntrinsicHeight(
+          child: Row(
             crossAxisAlignment: CrossAxisAlignment.stretch,
-            mainAxisSize: MainAxisSize.min,
+            spacing: 12,
             children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(4, 0, 4, 12),
-                child: Text('代理模式', style: flvpText(13, color: colors.ink2)),
+              Expanded(
+                flex: 2,
+                child: _LatencyCard(running: running, latency: node.latency),
               ),
-              FlvpSegmented<FlvpProxyMode>(
-                full: true,
-                value: store.settings.mode,
-                onChanged: (mode) =>
-                    store.setSettings((s) => s.copyWith(mode: mode)),
-                options: _modeOptions,
+              Expanded(
+                flex: 3,
+                child: _QuotaCard(
+                  onTap: () => onNavigate(FlvpPageKey.profiles),
+                  stretch: false,
+                  showPercent: true,
+                ),
               ),
             ],
           ),
         ),
-        FlvpCard(
-          padding: const EdgeInsets.all(16),
-          onTap: () => onNavigate(FlvpPageKey.proxies),
+        const FlvpOutboundCard(),
+        IntrinsicHeight(
           child: Row(
-            spacing: 14,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            spacing: 12,
+            children: [
+              Expanded(
+                flex: 2,
+                child: _ModeCard(
+                  mode: store.settings.mode,
+                  onChanged: (mode) =>
+                      store.setSettings((s) => s.copyWith(mode: mode)),
+                ),
+              ),
+              Expanded(
+                flex: 3,
+                child: _NodeCard(
+                  node: node,
+                  traffic: store.traffic,
+                  onTap: () => onNavigate(FlvpPageKey.proxies),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// 横向启停条：左电源键（连接时圆角方块 / 断开时圆形）、中状态与节点、
+/// 右运行时长；整条可点，连接时整条铺主题色。
+class _MobileStatusBar extends StatelessWidget {
+  const _MobileStatusBar({
+    required this.running,
+    required this.node,
+    required this.uptime,
+    required this.onToggle,
+  });
+
+  final bool running;
+  final NodeInfo node;
+  final int uptime;
+  final VoidCallback onToggle;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = FlvpThemeScope.colorsOf(context);
+    final strong = running ? colors.onprimary : colors.ink;
+    final soft = running
+        ? colors.onprimary.withValues(alpha: 0.78)
+        : colors.ink2;
+    final faint = running
+        ? colors.onprimary.withValues(alpha: 0.66)
+        : colors.ink3;
+    return Semantics(
+      button: true,
+      label: running ? '停止代理' : '启动代理',
+      child: FlvpRipple(
+        color: running ? colors.onprimary : colors.ink,
+        borderRadius: BorderRadius.circular(24),
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: onToggle,
+          child: AnimatedContainer(
+            duration: FlvpMotion.shape,
+            curve: FlvpMotion.easeEmph,
+            height: 76,
+            padding: const EdgeInsets.fromLTRB(12, 0, 18, 0),
+            decoration: BoxDecoration(
+              color: running ? colors.primary : colors.surface,
+              borderRadius: BorderRadius.circular(24),
+              boxShadow: FlvpElevation.card,
+            ),
+            child: Row(
+              spacing: 14,
+              children: [
+                AnimatedContainer(
+                  duration: FlvpMotion.shape,
+                  curve: FlvpMotion.easeEmph,
+                  width: 52,
+                  height: 52,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: running
+                        ? colors.onprimary.withValues(alpha: 0.20)
+                        : colors.surf3,
+                    borderRadius: BorderRadius.circular(running ? 16 : 999),
+                  ),
+                  child: FlvpIcon(
+                    'Power',
+                    size: 22,
+                    strokeWidth: 2.2,
+                    color: running ? colors.onprimary : colors.ink2,
+                  ),
+                ),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        running ? '已连接' : '未连接',
+                        maxLines: 1,
+                        style: flvpText(
+                          17,
+                          weight: FontWeight.w600,
+                          color: strong,
+                        ),
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        _nodeLine(node),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: flvpText(
+                          12.5,
+                          weight: FontWeight.w400,
+                          color: soft,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      '运行时长',
+                      style: flvpText(
+                        10.5,
+                        weight: FontWeight.w400,
+                        color: faint,
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      running ? fmtUptime(uptime) : '--:--:--',
+                      style: flvpText(
+                        15,
+                        weight: FontWeight.w600,
+                        color: strong,
+                        tabular: true,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// 拼图窄格：延迟与线路质量。
+class _LatencyCard extends StatelessWidget {
+  const _LatencyCard({required this.running, required this.latency});
+
+  final bool running;
+  final int? latency;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = FlvpThemeScope.colorsOf(context);
+    final raw = latency;
+    final ms = running && raw != null && raw > 0 ? raw : null;
+    final (String quality, Color tone) = ms == null
+        ? (running ? '未测速' : '未连接', colors.ink3)
+        : ms < 100
+        ? ('线路优秀', colors.ok)
+        : ms < 200
+        ? ('线路一般', colors.warn)
+        : ('线路较差', colors.err);
+    return FlvpCard(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 28,
+                height: 28,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: tone.withValues(alpha: 0.15),
+                ),
+                child: FlvpIcon('Gauge', size: 14, color: tone),
+              ),
+              const SizedBox(width: 10),
+              Text('延迟', style: flvpText(13, color: colors.ink2)),
+            ],
+          ),
+          const SizedBox(height: 12),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.baseline,
+              textBaseline: TextBaseline.alphabetic,
+              children: [
+                Text(
+                  ms?.toString() ?? '—',
+                  style: flvpText(
+                    22,
+                    height: 1,
+                    color: colors.ink,
+                    tabular: true,
+                  ),
+                ),
+                if (ms != null) ...[
+                  const SizedBox(width: 4),
+                  Text(
+                    'ms',
+                    style: flvpText(
+                      12,
+                      weight: FontWeight.w400,
+                      color: colors.ink3,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          const Spacer(),
+          Text(
+            quality,
+            style: flvpText(11.5, weight: FontWeight.w600, color: tone),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// 拼图窄格：代理模式竖排。
+class _ModeCard extends StatelessWidget {
+  const _ModeCard({required this.mode, required this.onChanged});
+
+  final FlvpProxyMode mode;
+  final ValueChanged<FlvpProxyMode> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = FlvpThemeScope.colorsOf(context);
+    return FlvpCard(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        spacing: 8,
+        children: [
+          Text('代理模式', style: flvpText(13, color: colors.ink2)),
+          for (final option in _modeOptions)
+            _ModeSegment(
+              label: option.label,
+              selected: option.value == mode,
+              onTap: () => onChanged(option.value),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ModeSegment extends StatelessWidget {
+  const _ModeSegment({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = FlvpThemeScope.colorsOf(context);
+    return FlvpHover(
+      builder: (context, hovered) => FlvpRipple(
+        color: selected ? colors.onprimary : colors.ink,
+        borderRadius: BorderRadius.circular(selected ? 999 : 12),
+        child: GestureDetector(
+          onTap: onTap,
+          child: AnimatedContainer(
+            duration: FlvpMotion.shape,
+            curve: FlvpMotion.easeEmph,
+            height: 34,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: selected
+                  ? colors.primary
+                  : (hovered ? colors.surf3 : colors.surf2),
+              borderRadius: BorderRadius.circular(selected ? 999 : 12),
+            ),
+            child: Text(
+              label,
+              maxLines: 1,
+              style: flvpText(
+                12.5,
+                color: selected ? colors.onprimary : colors.ink2,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// 拼图宽格：当前节点 + 累计流量，点进代理页。
+class _NodeCard extends StatelessWidget {
+  const _NodeCard({
+    required this.node,
+    required this.traffic,
+    required this.onTap,
+  });
+
+  final NodeInfo node;
+  final FlvpTraffic traffic;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = FlvpThemeScope.colorsOf(context);
+    return FlvpCard(
+      padding: const EdgeInsets.all(16),
+      onTap: onTap,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            spacing: 12,
             children: [
               Container(
                 width: 44,
@@ -646,23 +970,77 @@ class _MobileDashboard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Text('当前节点', style: flvpText(14.5, color: colors.ink)),
-                    const SizedBox(height: 2),
                     Text(
-                      '${node.name} · ${node.sub}',
+                      '当前节点',
+                      style: flvpText(11.5, color: colors.ink3),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      _nodeLine(node),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: flvpText(
-                        12.5,
-                        weight: FontWeight.w400,
-                        color: colors.ink2,
-                      ),
+                      style: flvpText(14, color: colors.ink),
                     ),
                   ],
                 ),
               ),
               FlvpIcon('ChevronRight', size: 18, color: colors.ink3),
             ],
+          ),
+          const Spacer(),
+          Padding(
+            padding: const EdgeInsets.only(top: 12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              spacing: 6,
+              children: [
+                Text('累计流量', style: flvpText(11.5, color: colors.ink3)),
+                Row(
+                  spacing: 12,
+                  children: [
+                    Expanded(
+                      child: _TrafficStat(
+                        icon: 'ArrowDown',
+                        value: fmtGB(traffic.down),
+                      ),
+                    ),
+                    Expanded(
+                      child: _TrafficStat(
+                        icon: 'ArrowUp',
+                        value: fmtGB(traffic.up),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _TrafficStat extends StatelessWidget {
+  const _TrafficStat({required this.icon, required this.value});
+
+  final String icon;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = FlvpThemeScope.colorsOf(context);
+    return Row(
+      spacing: 6,
+      children: [
+        FlvpIcon(icon, size: 13, color: colors.ink3),
+        Flexible(
+          child: Text(
+            value,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: flvpText(12.5, color: colors.ink, tabular: true),
           ),
         ),
       ],

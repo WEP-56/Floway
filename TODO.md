@@ -506,3 +506,20 @@ Windows 侧边栏与 Android 底栏统一为五个主入口：**仪表盘 / 代�
 - 签名：keystore 在 `C:\Users\14844\Documents\floway-release.jks`（alias `floway`，PKCS12/RSA 4096/10000 天），四个 Secrets（`KEYSTORE` base64、`KEY_ALIAS`、`STORE_PASSWORD`、`KEY_PASSWORD`）已用 `gh secret set` 写入仓库 WEP-56/Floway；同一份信息备份在 `C:\Users\14844\Documents\secrets.txt`。`.gitignore` 补上 `android/local.properties`、`android/app/keystore.jks`、`android/key.properties`、`/dist/`、`/env.json`。
 
 验证：`flutter analyze --no-pub lib test` 干净；`test/ui` 全量 40 例通过（新增 `test/ui/mobile_shell_test.dart` 覆盖 dock 槽位居中与等宽、`test/ui/settings_floway_pages_test.dart` 增加访问控制页授权入口与保存）。安卓实机由用户验证：dock 居中、标题间距、通知图标、访问控制授权、TUN 隐藏、重连节点均正常。
+
+### 安装器与 FLClash 共存（2026-11-02）
+
+- **根因**：`windows/packaging/exe/make_config.yaml` 的 `app_id` 与上游 FLClash 完全相同（`728B3532-C74B-4870-9068-BE70FE12A3E6`）。Inno 用 AppId 认定「已安装的旧版本」，于是装 Floway 时把已装的 FLClash 当成旧版 Floway：`DisableDirPage` 默认 auto 跳过目录页、`UsePreviousAppDir` 直接给出 FLClash 的目录、`Uninstall\728B3532-…_is1` 被覆盖成 Floway；卸载器再按自己的 `{app}` 删整目录，两个产品一起消失，FLClash 的快捷方式指向被覆盖的 `data\` 也打不开。
+- **改动**：`app_id` → `403EFA20-8A74-4183-B5EC-1F4B0A16B238`，`publisher` → Floway；`.iss` 显式 `DefaultDirName={autopf}\Floway`、`UninstallDisplayName`/`UninstallDisplayIcon`、`CloseApplications=no`/`RestartApplications=no`（Restart Manager 不去动隔壁 FLClash）。
+- **卸载范围**：只清 `Floway\Floway`（%APPDATA%、%LOCALAPPDATA%）与早期 `com.follow\Floway`；删掉从上游继承来的 `com.follow\clash` 清理——那是 FLClash 的配置目录，之前卸载 Floway 会顺手删掉 FLClash 的设置。注册表只删指向本安装的 `Run` 值与 `clash`/`clashmeta`/`floway`/`flclash` 协议键。
+- **旧版迁移**：`InitializeSetup` 读旧键 `...\Uninstall\{728B3532-…}_is1`；目录里只有 `Floway.exe` 时当默认目录原地升级、装完删旧键；目录里同时有 `FlClash.exe` 时只弹自定义消息 `LegacySharedDir` 提示清理顺序，不继承目录也不删键。
+- **验证**：`ISCC` 编译通过（`.verify/installer/render.ps1` 复现 flutter_distributor 的 `{{VAR}}`/`{% for %}`/`{% if %}` 渲染）；`.verify/installer/legacy_test.ps1` 用临时 GUID 覆盖四种机器状态（无旧键 / 纯 Floway 目录 / Floway 混在 FLClash 目录 / 只有 FLClash），`probe` 与 `final` 均与预期一致，全程未碰真实注册表。
+- **未做**：真实 `dart setup.dart windows` 打包与双机实测（用户本地执行）；`clash://`、`clashmeta://` 仍是两个产品抢同一个协议键，谁最后启动谁生效——这是上游行为，未改。
+- **待确认**：ISCC 会把 `OutputBaseFilename=Floway.exe` 补成 `Floway.exe.exe`；若真实打包产物也是这个名字，应把 `output_base_file_name` 改成不带扩展名的 `Floway-Setup`。
+### 移动端仪表盘改版与 0.0.2（2026-11-02）
+
+- `pubspec.yaml` 版本 `0.0.1+1` → `0.0.2+2`，发布标签 `v0.0.2`。
+- `lib/ui/pages/dashboard_page.dart`：`_MobileDashboard` 去掉 150 的大圆盘，换成 76 高的横向启停条 `_MobileStatusBar`——左侧电源键 52（连接时圆角方块、断开时圆形），中间状态与节点，右侧运行时长；整条可点启停，连接时整条铺 `colors.primary`、文字转 `onprimary`，断开时回到 surface 底。
+- 拼图节奏 `3/2 → 2/3 → 通栏 → 2/3`：下载 3 / 上传 2 → 延迟 2 / 订阅流量 3 → 出口信息通栏 → 代理模式 2 / 当前节点+累计流量 3。新增 `_LatencyCard`（延迟 + 线路优秀/一般/较差，按 <100 / <200 分档）、`_ModeCard`（竖排规则/全局/直连）、`_NodeCard`（当前节点 + 累计下载/上传，点进代理页）。
+- `_SpeedCard` 数值行加 `FittedBox(scaleDown)` 防窄格溢出；`_QuotaCard` 新增 `showPercent`，移动端标题行右侧显示已用百分比。
+- 验证：`flutter analyze --no-pub lib test` 干净；`flutter test test/ui/mobile_shell_test.dart` 通过（360×733 挂载手机壳与新仪表盘，无布局异常）。安卓/Windows 打包与实机由用户在 release 上验证。
